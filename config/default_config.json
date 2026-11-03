@@ -1,0 +1,10 @@
+# Cấu hình mạng mô phỏng và validator theo yêu cầu Lab 01
+{
+  "chain_id": "lab01_chain",
+  "num_nodes": 8,
+  "byzantine_nodes": 2,
+  "delta_synchrony_ms": 100,
+  "max_outbound_rate": 50,
+  "random_seed": 42,
+  "timeout_round_ms": 1000
+}
