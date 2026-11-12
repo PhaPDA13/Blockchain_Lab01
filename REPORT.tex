@@ -1,0 +1,203 @@
+\documentclass[12pt,a4paper]{report}
+
+% --- Unicode fonts (compiled with XeLaTeX) ---
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\usepackage[vietnamese]{babel}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{calc}
+\usepackage{array}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{tabularx}
+\usepackage{caption}
+\captionsetup[table]{position=top}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{enumitem}
+\geometry{top=2cm,bottom=2cm,left=2.5cm,right=2.5cm}
+\hypersetup{colorlinks=true,linkcolor=darkblueframe,urlcolor=darkblueframe}
+
+\definecolor{darkblueframe}{RGB}{0,70,140}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{2}
+\setlist{itemsep=2pt,topsep=4pt}
+
+\begin{document}
+
+% -------------------- Cover --------------------
+\begin{titlepage}
+\thispagestyle{empty}
+\begin{tikzpicture}[overlay,remember picture]
+  \draw[line width=1.5pt,color=darkblueframe]
+    ($(current page.north west)+(1.35cm,-1.35cm)$) rectangle
+    ($(current page.south east)+(-1.35cm,1.35cm)$);
+  \draw[line width=0.5pt,color=darkblueframe]
+    ($(current page.north west)+(1.48cm,-1.48cm)$) rectangle
+    ($(current page.south east)+(-1.48cm,1.48cm)$);
+\end{tikzpicture}
+
+\centering
+\vspace*{0.45cm}
+{\Large\bfseries ĐẠI HỌC QUỐC GIA TP. HỒ CHÍ MINH}\\[0.18cm]
+{\large\bfseries TRƯỜNG ĐẠI HỌC KHOA HỌC TỰ NHIÊN}\\[0.18cm]
+{\large\bfseries KHOA CÔNG NGHỆ THÔNG TIN}
+
+\vspace{0.35cm}
+{\color{darkblueframe}\rule{0.58\textwidth}{1pt}}
+
+\vspace{0.55cm}
+\IfFileExists{logo.jpg}
+  {\includegraphics[width=0.2\textwidth]{logo.jpg}}
+  {\fbox{\parbox[c][2.6cm][c]{0.2\textwidth}{\centering Logo HCMUS}}}
+
+\vspace{0.55cm}
+{\color{darkblueframe}\fontsize{38}{44}\selectfont\bfseries LAB 01}
+
+\vspace{0.25cm}
+{\color{darkblueframe}\rule{0.32\textwidth}{1pt}}
+
+\vspace{0.5cm}
+{\Large\bfseries MÔ PHỎNG BLOCKCHAIN LAYER 1\\VỚI CƠ CHẾ ĐỒNG THUẬN BFT}
+
+\vspace{0.65cm}
+{\large\bfseries THÔNG TIN HỌC PHẦN}
+
+\vspace{0.3cm}
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{>{\bfseries}r @ {\hspace{0.8em}} l}
+Môn học & Nhập môn blockchain và ứng dụng (CSC15010) \\
+Lớp & CQ2023/22 \\
+Học kỳ & Học kỳ 1 -- 2026/2027 \\
+\end{tabular}
+
+\vspace{0.55cm}
+{\color{darkblueframe}\rule{0.72\textwidth}{0.6pt}}
+
+\vspace{0.4cm}
+{\large\bfseries THÀNH VIÊN THỰC HIỆN}
+
+\vspace{0.25cm}
+\begin{tabular}{>{\bfseries}r @ {\hspace{0.8em}} l}
+Giảng viên & Th.S Ngô Đình Huy \\
+\multicolumn{2}{c}{\rule{0pt}{0.35cm}} \\
+1. & Nguyễn Gia Huy -- 23120273 \\
+2. & Bùi Duy Khánh -- 231204281 \\
+3. & Nguyễn Đăng Khoa -- 23120315 \\
+4. & Nguyễn Ngọc Nhân Trọng -- 23120382 \\
+\end{tabular}
+
+\vfill
+{\itshape TP. Hồ Chí Minh, Tháng 11 Năm 2026}
+\end{titlepage}
+
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+% -------------------- Report --------------------
+\chapter{Giới thiệu}
+\section{Bối cảnh}
+Blockchain là một sổ cái được nhiều máy tính cùng lưu giữ. Trước khi thêm block mới, các node cần xác minh dữ liệu và thống nhất rằng block đó hợp lệ. Bài lab xây dựng một mô hình Layer 1 thu nhỏ để minh họa các thành phần chính của node validator: giao dịch có chữ ký, thực thi trạng thái, đồng thuận Byzantine Fault Tolerant (BFT), và mạng truyền thông điệp có lỗi.
+
+Đây là simulator phục vụ học tập, không kết nối vào một blockchain công khai và không xử lý tài sản thật.
+
+\section{Mục tiêu}
+Các mục tiêu của project gồm:
+\begin{itemize}
+  \item Tạo và xác minh chữ ký Ed25519, băm SHA-256 và mã hóa dữ liệu nhất quán.
+  \item Kiểm tra giao dịch, quyền sở hữu khóa trạng thái và chống phát lại bằng nonce.
+  \item Mô hình hóa block, state root và quy trình bỏ phiếu hai pha Prevote/Precommit.
+  \item Mô phỏng độ trễ, mất và gửi trùng thông điệp; tạo log có thể tái lập theo seed.
+  \item Viết unit test và các kịch bản end-to-end để kiểm tra các thuộc tính an toàn cơ bản.
+\end{itemize}
+
+\section{Phạm vi}
+Mã nguồn hiện thực các cấu trúc và hành vi cốt lõi ở mức mô phỏng. Phần network simulator có hàng đợi sự kiện và inbox cho node; tuy nhiên, repo hiện chưa có một vòng chạy tổng thể tự động nối việc gửi message, gọi xử lý message tại node, timeout, đề xuất block và chốt block thành một tiến trình duy nhất. Vì vậy, kết quả cần được hiểu trong phạm vi từng thành phần và test hiện có.
+
+\chapter{Kiến trúc hệ thống}
+\section{Các tầng chính}
+Project được chia thành các tầng với trách nhiệm riêng:
+\begin{description}[style=nextline,leftmargin=0pt]
+  \item[Crypto] \texttt{src/crypto/} quản lý khóa, chữ ký, hash và biểu diễn dữ liệu.
+  \item[Execution] \texttt{src/execution/} định nghĩa transaction, block và trạng thái key-value.
+  \item[Consensus] \texttt{src/consensus/} tạo phiếu, đếm quorum và giữ trạng thái khóa.
+  \item[Network] \texttt{src/network/} mô phỏng message, lịch giao nhận và log sự kiện.
+  \item[Node] \texttt{src/node.py} kết hợp state, consensus, block buffer và transaction pool cục bộ.
+\end{description}
+
+\section{Luồng xử lý dự kiến}
+Một vòng xử lý block được mô hình hóa theo chuỗi sau:
+\begin{enumerate}
+  \item Người dùng tạo và ký transaction bằng khóa riêng.
+  \item Proposer chọn các transaction hợp lệ, thực thi thử trên bản sao state và tạo header chứa state root dự kiến.
+  \item Các validator kiểm tra block, rồi phát phiếu PREVOTE cho block hash hoặc NIL.
+  \item Khi có quorum PREVOTE, validator phát PRECOMMIT tương ứng.
+  \item Khi đạt quorum PRECOMMIT cho cùng block, block được chốt; các transaction được áp dụng vào state.
+\end{enumerate}
+
+Với 8 validator, code tính $f=\lfloor(8-1)/3\rfloor=2$ và quorum $2f+1=5$. Đây là ngưỡng dùng trong engine để kiểm tra phiếu.
+
+\chapter{Giao dịch, block và trạng thái}
+\section{Giao dịch}
+Transaction gồm sender, state key, giá trị mới, nonce và chữ ký. Payload được ký trong domain \texttt{TX:<chain\_id>}; do đó chữ ký gắn với chain cụ thể. Hàm xác minh cũng yêu cầu state key có tiền tố thuộc sender, ngăn một tài khoản sửa khóa của tài khoản khác.
+
+Hash giao dịch được tính xác định từ payload. State từ chối transaction không hợp lệ hoặc nonce đã được dùng, nhằm giới hạn việc phát lại transaction. Các kiểm tra này được thể hiện trong \texttt{src/execution/transaction.py} và \texttt{src/execution/state.py}.
+
+\section{Block và state root}
+Header chứa parent hash, chiều cao, round, state root và proposer. Proposer ký header theo domain \texttt{HEADER:<chain\_id>}. Block hash bắt nguồn từ payload của header. Khi tạo proposal, node thực thi thử các transaction trên bản sao state để đưa state root sau thực thi vào header.
+
+State root là hash đại diện cho trạng thái hiện tại. Thay đổi dữ liệu sẽ làm thay đổi root, giúp node so sánh trạng thái sau khi thực thi. Repo cũng có cấu trúc Merkle Patricia Trie và kiểm tra proof ở các phần liên quan đến state.
+
+\chapter{Đồng thuận BFT}
+\section{Hai pha bỏ phiếu}
+Engine chọn proposer theo vòng luân phiên xác định từ height và round. Validator gửi PREVOTE trước; sau khi quan sát đủ phiếu cho một block, có thể gửi PRECOMMIT. Quorum được tính trên các validator duy nhất, cùng height, round và phase.
+
+\section{Khóa và chống phiếu trùng}
+ConsensusLockState ghi nhận phiếu đã ký của node và phiếu nhận từ peer. Nó từ chối phiếu từ validator không thuộc validator set, chữ ký không hợp lệ, phiếu trùng và phiếu thứ hai của cùng validator trong cùng height/round/phase. Trạng thái khóa giúp hạn chế việc chuyển sang block khác tùy tiện giữa các round.
+
+Nếu proposer không hoạt động, engine có thể tăng round và chọn proposer tiếp theo. Việc tăng round được mô hình hóa qua hàm chuyển round; xử lý timeout thực tế ở cấp toàn mạng còn tùy phần điều phối simulator.
+
+\chapter{Mô phỏng mạng và ghi log}
+\section{Network simulator}
+NetworkSimulator dùng seed để tạo các quyết định ngẫu nhiên có thể tái lập. Trước thời điểm ổn định, message có thể bị drop, delay hoặc duplicate. Message được xếp vào hàng đợi ưu tiên theo thời gian giao nhận; khi mô phỏng tiến một tick, các message đến hạn được chuyển vào inbox của người nhận.
+
+Simulator hiện mô tả cơ chế truyền và phân phối message. Nó chưa tự gọi handler của Node hay tự tạo các phiếu consensus. Do đó test mạng cần được hiểu là kiểm tra các chức năng đã được nối cụ thể trong từng test, không mặc định rằng mọi kịch bản chạy qua một mạng BFT hoàn chỉnh.
+
+\section{Log xác định}
+Logger ghi sự kiện theo dạng canonical để có thể so sánh byte log giữa hai lần chạy cùng seed. Khả năng tái lập giúp debug: khi kết quả khác nhau, có thể kiểm tra sự kiện nào, ở thời điểm nào, đã dẫn đến sai khác.
+
+\chapter{Kiểm thử}
+Repo tổ chức test thành \texttt{tests/unit/} và \texttt{tests/e2e/}. Unit test tập trung vào crypto, state và quy tắc consensus. Bộ kịch bản E2E được mô tả trong \texttt{tests/e2e/test\_scenarios.py}, gồm:
+\begin{description}[style=nextline,leftmargin=0pt]
+  \item[T1 -- Chạy bình thường] Các node chốt cùng block và state root.
+  \item[T2 -- Message trùng hoặc sai thứ tự] Không đếm phiếu trùng; xử lý đúng phiếu đến đảo thứ tự.
+  \item[T3 -- Chữ ký/domain sai] Từ chối thông điệp có chữ ký hoặc chain context không hợp lệ.
+  \item[T4 -- Transaction phát lại] Chỉ áp dụng transaction hợp lệ tối đa một lần.
+  \item[T5 -- Mất/trễ message] Kiểm tra safety, tức không chốt hai block khác nhau tại cùng height.
+  \item[T6 -- Proposer dừng] Mô hình hóa timeout và chuyển sang round/proposer tiếp theo.
+  \item[T7 -- Byzantine equivocation] Kiểm tra phiếu mâu thuẫn từ validator Byzantine không tạo quorum giả.
+  \item[T8 -- Chạy lại cùng seed] So sánh state root và log canonical giữa hai lần chạy.
+\end{description}
+
+Có thể gọi toàn bộ test bằng lệnh \texttt{python -m tests.run\_all\_tests}. Các kịch bản mô tả mục tiêu kiểm tra; mức độ bao phủ thực tế phụ thuộc vào phần logic mà từng test trực tiếp gọi. Đặc biệt, một số test fault-injection hiện chỉ kiểm tra thành phần hoặc trạng thái ban đầu, chưa tạo đầy đủ một cuộc chạy nhiều node qua NetworkSimulator.
+
+\chapter{Giới hạn và hướng phát triển}
+\begin{itemize}
+  \item Bổ sung bộ điều phối event loop để nối simulator với Node handlers, timeout và các bước consensus.
+  \item Kiểm tra chặt header/block trước khi vote: proposer hợp lệ, parent hash, height, chữ ký và state root sau thực thi.
+  \item Mở rộng test fault-injection thành các lượt chạy thực sự có drop, delay, duplicate và Byzantine node.
+  \item Bổ sung kiểm tra state root/proof độc lập và quản lý nonce theo từng sender rõ ràng.
+  \item Ghi lại cấu hình, log và kết quả đầu ra cho mỗi kịch bản để báo cáo có thể tái lập.
+\end{itemize}
+
+\chapter{Kết luận}
+Project cung cấp mô hình cơ bản để học cách một node blockchain xử lý transaction, tạo block, bỏ phiếu BFT và cập nhật state. Việc tách crypto, execution, consensus và network giúp từng mối quan tâm dễ đọc và kiểm tra hơn. Các test hiện có minh họa nhiều tình huống quan trọng như chữ ký sai, transaction bị phát lại, phiếu trùng và log xác định.
+
+Để tiến gần hơn tới một simulator đầu-cuối, bước tiếp theo quan trọng là tích hợp các module thành một vòng chạy mạng hoàn chỉnh và làm cho từng kịch bản fault-injection thực sự đi qua vòng đó.
+
+\end{document}

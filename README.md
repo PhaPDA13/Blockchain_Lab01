@@ -1,11 +1,10 @@
 # Blockchain Lab 01: Layer 1 Blockchain Simulator with BFT Consensus
 
 ## 1. Thông Tin Nhóm / Member Information
-- **MSSV 1 / Lead**: 2310315
-- **MSSV 2**: [Điền MSSV thành viên 2 nếu có]
-- **MSSV 3**: [Điền MSSV thành viên 3 nếu có]
-- **MSSV 4**: [Điền MSSV thành viên 4 nếu có]
-- **MSSV 5**: [Điền MSSV thành viên 5 nếu có]
+- **Nguyễn Gia Huy**: 23120273
+- **Bùi Duy Khánh**: 231204281
+- **Nguyễn Đăng Khoa**: 23120315
+- **Nguyễn Ngọc Nhân Trọng**: 23120382
 
 ---
 
