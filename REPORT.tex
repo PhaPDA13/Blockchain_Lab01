@@ -1,4 +1,4 @@
-\documentclass[12pt,a4paper]{report}
+\documentclass[11pt,a4paper]{report}
 
 % --- Unicode fonts (compiled with XeLaTeX) ---
 \usepackage{fontspec}
@@ -8,6 +8,7 @@
 \usepackage{graphicx}
 \usepackage{tikz}
 \usetikzlibrary{calc}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
 \usepackage{array}
 \usepackage{amsmath,amssymb}
 \usepackage{geometry}
@@ -94,9 +95,6 @@ Giảng viên & Th.S Ngô Đình Huy \\
 {\itshape TP. Hồ Chí Minh, Tháng 11 Năm 2026}
 \end{titlepage}
 
-\pagenumbering{roman}
-\tableofcontents
-\clearpage
 \pagenumbering{arabic}
 
 % -------------------- Report --------------------
@@ -130,6 +128,29 @@ Project được chia thành các tầng với trách nhiệm riêng:
   \item[Node] \texttt{src/node.py} kết hợp state, consensus, block buffer và transaction pool cục bộ.
 \end{description}
 
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw,rounded corners=3pt,minimum width=10.8cm,minimum height=0.72cm,align=center,font=\small},
+  arr/.style={-{Stealth[length=2.2mm]},thick,color=darkblueframe},
+  node distance=0.24cm
+]
+\node[box,fill=blue!9] (api) {Ứng dụng / RPC (lớp phục vụ được mô tả trong kiến trúc)};
+\node[box,fill=orange!13,below=of api] (node) {Node validator -- \texttt{src/node.py}};
+\node[box,fill=green!12,below=of node] (cons) {Consensus: Prevote, Precommit, quorum, khóa block};
+\node[box,fill=yellow!18,below=of cons] (exec) {Execution: transaction, block, state root};
+\node[box,fill=red!8,below=of exec] (crypto) {Crypto: chữ ký Ed25519, hash, encoding};
+\node[box,fill=violet!10,below=of crypto] (net) {Network simulator: delay, drop, duplicate, logger};
+\draw[arr] (api) -- (node);
+\draw[arr] (node) -- (cons);
+\draw[arr] (cons) -- (exec);
+\draw[arr] (exec) -- (crypto);
+\draw[arr,<->] (net.east) -- ++(1.1,0) |- (node.east);
+\end{tikzpicture}
+\caption{Sơ đồ các thành phần chính trong kiến trúc node của bài lab. Lớp RPC được nêu như vai trò kiến trúc; repo hiện chưa hiện thực module RPC riêng.}
+\label{fig:node-architecture}
+\end{figure}
+
 \section{Luồng xử lý dự kiến}
 Một vòng xử lý block được mô hình hóa theo chuỗi sau:
 \begin{enumerate}
@@ -156,6 +177,29 @@ State root là hash đại diện cho trạng thái hiện tại. Thay đổi d�
 \chapter{Đồng thuận BFT}
 \section{Hai pha bỏ phiếu}
 Engine chọn proposer theo vòng luân phiên xác định từ height và round. Validator gửi PREVOTE trước; sau khi quan sát đủ phiếu cho một block, có thể gửi PRECOMMIT. Quorum được tính trên các validator duy nhất, cùng height, round và phase.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  stepbox/.style={draw,rounded corners=3pt,minimum width=3.35cm,minimum height=1.05cm,align=center,font=\small},
+  arr/.style={-{Stealth[length=2.2mm]},thick,color=darkblueframe},
+  node distance=0.48cm
+]
+\node[stepbox,fill=blue!9] (prop) {Proposer\\đề xuất block};
+\node[stepbox,fill=green!12,right=of prop] (prevote) {Validators kiểm tra\\và gửi PREVOTE};
+\node[stepbox,fill=yellow!18,right=of prevote] (q1) {Đạt quorum\\$2f+1$ PREVOTE};
+\node[stepbox,fill=orange!15,below=0.75cm of q1] (precommit) {Gửi\\PRECOMMIT};
+\node[stepbox,fill=red!9,left=of precommit] (q2) {Đạt quorum\\$2f+1$ PRECOMMIT};
+\node[stepbox,fill=violet!10,left=of q2] (final) {Chốt block\\và cập nhật state};
+\draw[arr] (prop) -- (prevote);
+\draw[arr] (prevote) -- (q1);
+\draw[arr] (q1) -- (precommit);
+\draw[arr] (precommit) -- (q2);
+\draw[arr] (q2) -- (final);
+\end{tikzpicture}
+\caption{Luồng đồng thuận hai pha được mô hình hóa trong consensus engine. Với 8 validator, $f=2$ và quorum là 5 phiếu.}
+\label{fig:bft-flow}
+\end{figure}
 
 \section{Khóa và chống phiếu trùng}
 ConsensusLockState ghi nhận phiếu đã ký của node và phiếu nhận từ peer. Nó từ chối phiếu từ validator không thuộc validator set, chữ ký không hợp lệ, phiếu trùng và phiếu thứ hai của cùng validator trong cùng height/round/phase. Trạng thái khóa giúp hạn chế việc chuyển sang block khác tùy tiện giữa các round.
