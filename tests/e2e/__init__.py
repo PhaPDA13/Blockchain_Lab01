@@ -1,1 +1,1 @@
-"""End-to-end tests package."""
+"""Lab scenario checks, including manually driven and component-level cases."""

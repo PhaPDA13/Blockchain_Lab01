@@ -2,7 +2,7 @@
 Deterministic event logging for consensus and network events.
 Uses logical/simulated timestamps to guarantee byte-identical logs across runs with same seed.
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from ..crypto.encoding import canonical_encode
 
 
@@ -19,11 +19,12 @@ class NetworkLogger:
         event_type: str,  # send, drop, delay, block, unblock, vote, finalize
         height: int,
         details: Dict[str, Any] = None,
+        node_id: Optional[str] = None,
     ):
         """Record an event with deterministic logical time, node_id, type, and height."""
         entry = {
             "time": logical_time,
-            "node_id": self.node_id,
+            "node_id": node_id or self.node_id,
             "type": event_type,
             "height": height,
             "details": details or {},

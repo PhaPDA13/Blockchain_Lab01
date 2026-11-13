@@ -6,3 +6,4 @@ from .logger import NetworkLogger
 from .simulator import NetworkSimulator
 
 __all__ = ["NetworkMessage", "MessageType", "NetworkLogger", "NetworkSimulator"]
+"""Network transport, deterministic simulation, and validator event loop."""

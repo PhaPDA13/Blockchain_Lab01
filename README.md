@@ -1,88 +1,98 @@
 # Blockchain Lab 01: Layer 1 Blockchain Simulator with BFT Consensus
 
-## 1. Thông Tin Nhóm / Member Information
-- **Nguyễn Gia Huy**: 23120273
-- **Bùi Duy Khánh**: 231204281
-- **Nguyễn Đăng Khoa**: 23120315
-- **Nguyễn Ngọc Nhân Trọng**: 23120382
+## Nhóm thực hiện
 
----
+- Nguyễn Gia Huy — `23120273`
+- Bùi Duy Khánh — `231204281`
+- Nguyễn Đăng Khoa — `23120315`
+- Nguyễn Ngọc Nhân Trọng — `23120382`
 
-## 2. Cấu Trúc Dự Án / Project Structure
-
+## Cấu trúc
 
 ```text
-Lab01_ID1_ID2_ID3_ID4_ID5/
-├── src/
-│   ├── crypto/           # Ed25519, hashing SHA-256, canonical encoding, domain separation
-│   ├── execution/        # Key-value state transitions, anti-replay, block/header structures
-│   ├── consensus/        # BFT 2-phase engine (Prevote & Precommit) với 7 quy tắc khóa khối
-│   ├── network/          # Mô phỏng mạng không tin cậy (delay, drop, dup), deterministic logger
-│   └── node.py           # Validator node tích hợp toàn bộ các tầng
-├── tests/
-│   ├── unit/             # Unit tests: crypto, state, consensus locking rules
-│   ├── e2e/              # End-to-end tests: 8 kịch bản bắt buộc (T1 - T8)
-│   └── run_all_tests.py  # Single entry point gọi toàn bộ test suites
-├── config/
-│   └── default_config.json # Cấu hình mạng (>= 8 nodes, delta, seed, round timeouts)
-├── logs/                 # Thư mục lưu vết byte-identical logs
-├── README.md             # Hướng dẫn build, chạy simulator và chạy test
-├── REPORT.pdf            # Báo cáo kỹ thuật (tối đa 10 trang)
-└── requirements.txt      # Thư viện phụ thuộc (cryptography, pytest)
+src/
+  crypto/       Ed25519, SHA-256, canonical encoding
+  execution/    Transactions, blocks, key-value state
+  consensus/    Prevote/Precommit, quorum counting, locking
+  network/      Event loop, header/body framing, fault simulator and logger
+  node.py       Validator node and block proposal/finalization
+run_simulation.py  Run one deterministic block simulation
+tests/
+  unit/         Crypto, state, and consensus checks
+  e2e/          Named Lab scenarios T1–T8
+config/         Example network configuration
+logs/           Placeholder for generated logs
+.github/workflows/tests.yml  CI test workflow
+README.md
+REPORT.tex      Report source
+REPORT.pdf      Report submitted with the project
+requirements.txt
+package_submission.py
 ```
 
----
+## Cài đặt
 
-## 3. Cài Đặt Môi Trường / Environment Setup
-
-Yêu cầu: **Python >= 3.10**
+Yêu cầu Python 3.10 trở lên.
 
 ```bash
-# 1. Khởi tạo môi trường ảo (khuyến nghị)
 python -m venv .venv
-# Trên Windows PowerShell:
-.venv\Scripts\Activate.ps1
+```
 
-# 2. Cài đặt các thư viện cần thiết
+PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
----
+## Chạy kiểm thử
 
-## 4. Chạy Kiểm Thử / Running Tests
-
-Mục 9 của `Lab01.pdf` yêu cầu toàn bộ test phải tái lập được và gọi được từ một entry point duy nhất:
+Từ thư mục gốc của repository, chạy entry point chung:
 
 ```bash
-# Chạy toàn bộ test suites (Unit tests + End-to-End T1->T8)
 python -m tests.run_all_tests
 ```
 
-Hoặc dùng `pytest`:
+Hoặc chạy trực tiếp bằng pytest:
+
 ```bash
 pytest -v tests/
 ```
 
-### Danh sách kịch bản E2E (T1 - T8):
-- **T1**: Normal run, no faults -> Tất cả các node honest chốt cùng chain và state hash.
-- **T2**: Duplicate/reordered messages -> Không tính trùng phiếu bầu, không xung đột kết quả chốt khối.
-- **T3**: Invalid signature / wrong domain -> Từ chối thông điệp có context sai (ví dụ sai chain_id).
-- **T4**: Replayed/duplicate transaction -> Áp dụng nhiều nhất 1 lần duy nhất nhờ nonce và tx hash check.
-- **T5**: Drop/delay before synchrony -> Đảm bảo tính Safety (không có 2 khối khác nhau ở cùng height).
-- **T6**: Proposer silent/crashed -> Kích hoạt round timeout, chuyển sang proposer kế tiếp.
-- **T7**: Up to f Byzantine validators equivocate -> Chống gian lận phân thân (n=8, f=2).
-- **T8**: Same seed rerun twice -> Tái lập chính xác từng byte log và state hash cuối cùng.
+Các kịch bản dùng `NetworkRunner` cùng `NetworkSimulator`; header, yêu cầu body, body và vote đều đi qua transport mô phỏng. T1–T8 kiểm tra:
 
----
+- **T1** chạy proposal đến finalization qua mạng bình thường; các node phải chốt cùng block và state root.
+- **T2** bật duplicate và delay/reorder; vote lặp không được đếm lại và không được split finality.
+- **T3–T4** gửi transaction sai domain và replay qua message handler; node từ chối và log lý do.
+- **T5** gây drop/delay trước thời điểm ổn định; không xuất hiện hai finality khác nhau và các node cuối cùng chốt cùng block.
+- **T6** làm proposer round 0 im lặng; timeout chuyển sang round 1 và đồng thuận tiếp tục.
+- **T7** chuyển các vote PREVOTE mâu thuẫn có chữ ký thật từ hai validator; mỗi node chỉ tính một vote cho mỗi validator/phase.
+- **T8** chạy lại cùng seed, so sánh state root, chuỗi block, log của từng node và log transport.
 
-## 5. Đóng Gói Bài Nộp / Packaging Submission
+`tests/run_all_tests.py` là entry point dùng cả cục bộ và CI. GitHub Actions chạy workflow khi push hoặc mở pull request. Bộ suite hiện có 21 unit/scenario tests.
 
+## Chạy simulator
 
-Bạn có thể sử dụng script hỗ trợ `package_submission.py`:
+Chạy một mô phỏng một block với cấu hình mặc định:
 
 ```bash
-python package_submission.py --ids 2310315
+python run_simulation.py
 ```
-*(Nếu làm theo nhóm, truyền danh sách MSSV: `python package_submission.py --ids 2310315 2310316 ...`)*
 
-Script sẽ tự động gom các thư mục `src/`, `tests/`, `logs/`, `config/`, `README.md`, `REPORT.pdf` vào đúng định dạng thư mục `Lab01_ID1_ID2_...` và nén thành `Lab01_ID1_ID2_....zip`.
+In thêm đường dẫn log canonical vào một thư mục mới:
+
+```bash
+python run_simulation.py --write-logs logs/run-42
+```
+
+Script từ chối dùng lại thư mục log đã tồn tại. Khóa validator được tạo xác định để tái lập kết quả, chỉ dùng cho simulator học tập.
+
+## Đóng gói bài nộp
+
+Từ thư mục gốc, truyền MSSV của các thành viên theo thứ tự mong muốn:
+
+```bash
+python package_submission.py --ids 23120273 231204281 23120315 23120382
+```
+
+Script tạo thư mục `Lab01_ID1_ID2_...` và file ZIP cùng tên, chứa `src/`, `tests/`, `logs/`, `config/`, `run_simulation.py`, `README.md` và `REPORT.pdf`. Script từ chối ghi đè gói đã tồn tại; xóa hoặc đổi tên gói cũ trước khi tạo lại.

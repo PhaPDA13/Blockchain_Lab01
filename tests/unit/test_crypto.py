@@ -1,7 +1,6 @@
 """
 Unit tests for cryptographic verification, domain separation, and deterministic encoding.
 """
-import pytest
 from src.crypto.identity import KeyPair, verify_signature
 from src.crypto.encoding import canonical_encode
 from src.crypto.hashing import hash_data, compute_state_root

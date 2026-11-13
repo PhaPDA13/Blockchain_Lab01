@@ -1,7 +1,6 @@
 """
 Unit tests for consensus vote counting, locking rules, and quorum calculation.
 """
-import pytest
 from src.crypto.identity import KeyPair
 from src.consensus.rules import ConsensusLockState
 from src.consensus.vote import Vote, VoteType
@@ -64,3 +63,43 @@ def test_quorum_calculation():
     v5.sign(validators[4], chain_id)
     engine.lock_state.add_received_vote(v5, chain_id, set(val_keys))
     assert engine.check_prevote_quorum(1, 0) == "block_hash_1"
+
+
+def test_precommit_requires_prevote_quorum():
+    validators = [KeyPair() for _ in range(8)]
+    val_keys = [key.public_key_hex for key in validators]
+    engine = ConsensusEngine("node0", validators[0], "test_chain", val_keys)
+
+    assert engine.create_precommit("block_hash_1") is None
+
+    for key in validators[:5]:
+        vote = Vote(key.public_key_hex, 1, 0, VoteType.PREVOTE, "block_hash_1")
+        vote.sign(key, "test_chain")
+        assert engine.add_received_vote(vote) is True
+
+    precommit = engine.create_precommit("block_hash_1")
+    assert precommit is not None
+
+
+def test_local_votes_count_toward_quorum():
+    validators = [KeyPair() for _ in range(8)]
+    val_keys = [key.public_key_hex for key in validators]
+    engine = ConsensusEngine("node0", validators[0], "test_chain", val_keys)
+
+    prevote = engine.create_prevote("block_hash_1")
+    assert prevote is not None
+    assert len(engine.lock_state.get_votes_for_phase(1, 0, VoteType.PREVOTE)) == 1
+
+    for key in validators[1:5]:
+        vote = Vote(key.public_key_hex, 1, 0, VoteType.PREVOTE, "block_hash_1")
+        vote.sign(key, "test_chain")
+        assert engine.add_received_vote(vote) is True
+    assert engine.check_prevote_quorum(1, 0) == "block_hash_1"
+
+    precommit = engine.create_precommit("block_hash_1")
+    assert precommit is not None
+    for key in validators[1:5]:
+        vote = Vote(key.public_key_hex, 1, 0, VoteType.PRECOMMIT, "block_hash_1")
+        vote.sign(key, "test_chain")
+        assert engine.add_received_vote(vote) is True
+    assert engine.check_precommit_quorum(1, 0) == "block_hash_1"

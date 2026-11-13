@@ -23,6 +23,8 @@ class ConsensusEngine:
         self.key_pair = key_pair
         self.chain_id = chain_id
         self.validators = sorted(validators)
+        if key_pair.public_key_hex not in self.validators:
+            raise ValueError("This node's public key must belong to the validator set.")
         self.n = len(self.validators)
         self.f = (self.n - 1) // 3
         self.quorum_size = 2 * self.f + 1
@@ -49,6 +51,16 @@ class ConsensusEngine:
         if not self.lock_state.can_sign_vote(self.height, self.round, VoteType.PREVOTE):
             return None
 
+        if block_hash and self.lock_state.locked_block_hash not in (None, block_hash):
+            quorum_round = self._latest_prevote_quorum_round(block_hash)
+            if not self.lock_state.can_prevote_block(
+                block_hash,
+                self.round,
+                block_hash,
+                quorum_round,
+            ):
+                return None
+
         vote = Vote(
             validator=self.key_pair.public_key_hex,
             height=self.height,
@@ -58,12 +70,18 @@ class ConsensusEngine:
         )
         vote.sign(self.key_pair, self.chain_id)
         self.lock_state.record_signed_vote(self.height, self.round, VoteType.PREVOTE, block_hash)
+        self.add_received_vote(vote)  # A validator's own vote counts toward quorum.
         return vote
 
     def create_precommit(self, block_hash: Optional[str]) -> Optional[Vote]:
         """Sign and return a PRECOMMIT for the current (height, round)."""
         if not self.lock_state.can_sign_vote(self.height, self.round, VoteType.PRECOMMIT):
             return None
+        if not self.has_prevote_quorum(block_hash, self.height, self.round):
+            return None
+
+        if block_hash:
+            self.lock_state.update_lock_on_prevote_quorum(block_hash, self.round)
 
         vote = Vote(
             validator=self.key_pair.public_key_hex,
@@ -74,7 +92,52 @@ class ConsensusEngine:
         )
         vote.sign(self.key_pair, self.chain_id)
         self.lock_state.record_signed_vote(self.height, self.round, VoteType.PRECOMMIT, block_hash)
+        self.add_received_vote(vote)  # A validator's own vote counts toward quorum.
         return vote
+
+    def add_received_vote(self, vote: Vote) -> bool:
+        """Validate a peer vote and update the lock when a prevote quorum forms."""
+        if (
+            vote.height != self.height
+            or vote.round < 0
+            or vote.round > self.round
+            or not isinstance(vote.phase, VoteType)
+        ):
+            return False
+
+        accepted = self.lock_state.add_received_vote(
+            vote=vote,
+            chain_id=self.chain_id,
+            validator_set=set(self.validators),
+        )
+        if accepted and vote.phase == VoteType.PREVOTE:
+            self._record_prevote_quorum(vote.height, vote.round)
+        return accepted
+
+    def has_prevote_quorum(
+        self,
+        block_hash: Optional[str],
+        height: int,
+        round: int,
+    ) -> bool:
+        """Return whether one candidate, including NIL, has a prevote quorum."""
+        target = block_hash or ""
+        votes = self.lock_state.get_votes_for_phase(height, round, VoteType.PREVOTE)
+        return sum((vote.block_hash or "") == target for vote in votes.values()) >= self.quorum_size
+
+    def _record_prevote_quorum(self, height: int, round: int) -> Optional[str]:
+        block_hash = self.check_prevote_quorum(height, round)
+        if block_hash:
+            self.lock_state.update_lock_on_prevote_quorum(block_hash, round)
+        return block_hash
+
+    def _latest_prevote_quorum_round(self, block_hash: str) -> int:
+        """Find a later-round justification observed before the current round."""
+        first_round = max(0, self.lock_state.locked_round + 1)
+        for round_number in range(self.round - 1, first_round - 1, -1):
+            if self.has_prevote_quorum(block_hash, self.height, round_number):
+                return round_number
+        return -1
 
     def check_prevote_quorum(self, height: int, round: int) -> Optional[str]:
         """
@@ -111,7 +174,7 @@ class ConsensusEngine:
         self.height += 1
         self.round = 0
         self.step = "PROPOSE"
-        self.lock_state.reset_for_height()
+        self.lock_state.reset_for_height(self.height)
         self.blocks.clear()
 
     def advance_to_next_round(self):

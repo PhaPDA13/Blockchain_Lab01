@@ -1,192 +1,312 @@
-"""
-End-to-end tests for Lab 01 (Scenarios T1 - T8).
-Required test cases from Section 9 of Lab01.pdf:
-- T1: Normal run, no faults -> All correct nodes finalize same chain and state hash
-- T2: Duplicate/reordered messages -> No double-counted votes, no conflicting finalization
-- T3: Invalid signature / wrong domain -> Message rejected, reason logged
-- T4: Replayed/duplicate transaction -> Applied at most once
-- T5: Drop/delay before synchrony -> Safety holds; no double finalization at same height
-- T6: Proposer silent/crashed -> Round timeout triggers, chain continues
-- T7: Up to f Byzantine validators equivocate -> No conflicting finalization
-- T8: Same seed rerun twice -> Byte-identical logs and final state hash
-"""
-import pytest
-from src.crypto.identity import KeyPair, verify_signature
-from src.execution.transaction import Transaction
-from src.execution.state import State
-from src.execution.block import Block, BlockHeader
-from src.consensus.engine import ConsensusEngine
+"""End-to-end Lab scenarios driven through NetworkRunner and NetworkSimulator."""
+from dataclasses import asdict
+
 from src.consensus.vote import Vote, VoteType
-from src.node import Node
+from src.crypto.identity import KeyPair
+from src.execution.transaction import Transaction
+from src.network.message import MessageType, NetworkMessage
+from src.network.runner import NetworkRunner
 from src.network.simulator import NetworkSimulator
+from src.node import Node
 
 
 def setup_cluster(num_nodes=8, seed=42):
     chain_id = "lab01_test_chain"
     key_pairs = [KeyPair.from_seed(bytes([i + seed % 200] * 32)) for i in range(num_nodes)]
-    val_keys = [kp.public_key_hex for kp in key_pairs]
+    validator_keys = [key_pair.public_key_hex for key_pair in key_pairs]
     nodes = [
-        Node(f"node_{i}", key_pairs[i], chain_id, val_keys)
-        for i in range(num_nodes)
+        Node(f"node_{index}", key_pairs[index], chain_id, validator_keys)
+        for index in range(num_nodes)
     ]
     return chain_id, nodes, key_pairs
 
 
-def test_t1_normal_run_no_faults():
-    """T1: All correct nodes finalize same chain and state hash."""
-    chain_id, nodes, key_pairs = setup_cluster(8)
-    sim = NetworkSimulator([n.node_id for n in nodes], seed=101)
+def setup_runner(
+    seed=42,
+    *,
+    drop_rate=0.0,
+    duplicate_rate=0.0,
+    stabilization_time=1000,
+    max_delay=2,
+    timeout=8,
+    auto_propose=True,
+):
+    chain_id, nodes, key_pairs = setup_cluster(seed=seed)
+    simulator = NetworkSimulator(
+        [node.node_id for node in nodes],
+        seed=seed + 500,
+        drop_rate=drop_rate,
+        duplicate_rate=duplicate_rate,
+        min_delay=1,
+        max_delay=max_delay,
+        stabilization_time=stabilization_time,
+        delta_bound=2,
+        max_outbound_rate=50,
+        rate_window_ticks=1000,
+    )
+    runner = NetworkRunner(
+        nodes,
+        simulator,
+        round_timeout_ticks=timeout,
+        retransmit_interval_ticks=1000,
+        auto_propose=auto_propose,
+    )
+    return chain_id, nodes, key_pairs, runner
 
-    # Proposer (node 0) creates block 1
+
+def make_transaction(key_pair, chain_id, value="active", nonce=0):
     tx = Transaction(
-        sender=key_pairs[0].public_key_hex,
-        key=f"{key_pairs[0].public_key_hex}/status",
-        value="active",
+        sender=key_pair.public_key_hex,
+        key=f"{key_pair.public_key_hex}/status",
+        value=value,
+        nonce=nonce,
+    )
+    tx.sign(key_pair, chain_id)
+    return tx
+
+
+def test_t1_normal_run_no_faults():
+    """T1: All correct nodes finalize the same block and state through the network."""
+    chain_id, nodes, key_pairs, runner = setup_runner()
+    proposer = next(
+        node
+        for node in nodes
+        if node.public_key_hex == node.consensus.get_proposer(height=1, round=0)
+    )
+    tx = make_transaction(key_pairs[0], chain_id)
+    assert runner.submit_transaction(tx, proposer.node_id) is True
+
+    assert runner.run_until_finalized(1, max_ticks=100) is True
+    finalized_hashes = {node.finalized_blocks[0].block_hash for node in nodes}
+    state_roots = {node.latest_state_root for node in nodes}
+    assert len(finalized_hashes) == 1
+    assert len(state_roots) == 1
+    assert runner.is_safe() is True
+
+    receiver = next(node for node in nodes if node is not proposer)
+    events = [entry["type"] for entry in receiver.logger.entries]
+    assert events.index("header_accepted") < events.index("body_accepted")
+    assert "prevote" in events
+    assert "precommit" in events
+
+
+def test_t2_duplicate_and_reordered_network_messages():
+    """T2: Duplicate and reordered delivery does not double-count votes or split finality."""
+    chain_id, nodes, key_pairs, runner = setup_runner(
+        seed=11, duplicate_rate=0.25, max_delay=4, timeout=30
+    )
+    proposer = next(
+        node
+        for node in nodes
+        if node.public_key_hex == node.consensus.get_proposer(height=1, round=0)
+    )
+    assert runner.submit_transaction(make_transaction(key_pairs[0], chain_id), proposer.node_id)
+
+    assert runner.run_until_finalized(1, max_ticks=150) is True
+    assert any(entry["type"] == "duplicate" for entry in runner.simulator.logger.entries)
+    assert any(
+        entry["type"] == "vote_rejected"
+        for node in nodes
+        for entry in node.logger.entries
+    )
+    assert len({node.finalized_blocks[0].block_hash for node in nodes}) == 1
+    assert runner.is_safe() is True
+
+
+def test_t3_invalid_signature_wrong_domain_is_rejected_and_logged():
+    """T3: An invalidly signed transaction is rejected at network ingress and logged."""
+    chain_id, nodes, _, runner = setup_runner(auto_propose=False)
+    tx = Transaction(
+        sender=nodes[0].public_key_hex,
+        key=f"{nodes[0].public_key_hex}/status",
+        value="forged",
         nonce=0,
     )
-    tx.sign(key_pairs[0], chain_id)
-    nodes[0].pending_transactions.append(tx)
-    block1 = nodes[0].create_proposal_block(parent_hash="0" * 64)
+    tx.signature = nodes[0].key_pair.sign(tx.payload_dict(), "TX:wrong_domain")
+    receiver = nodes[1]
+    runner.simulator.send_message(
+        NetworkMessage(
+            MessageType.TX,
+            nodes[0].node_id,
+            receiver.node_id,
+            1,
+            {"transaction": asdict(tx)},
+        )
+    )
+    forged_vote = Vote(
+        nodes[0].public_key_hex,
+        1,
+        0,
+        VoteType.PREVOTE,
+        "forged-block",
+    )
+    forged_vote.signature = nodes[0].key_pair.sign(
+        forged_vote.payload_dict(), "VOTE:wrong_domain"
+    )
+    runner.simulator.send_message(
+        NetworkMessage(
+            MessageType.VOTE,
+            nodes[0].node_id,
+            receiver.node_id,
+            1,
+            runner._vote_payload(forged_vote),
+        )
+    )
+    runner.run_for(3)
 
-    # All nodes receive block and vote
-    for node in nodes:
-        node.received_blocks[block1.block_hash] = block1
-        # Prevote
-        v_prevote = node.consensus.create_prevote(block1.block_hash)
-        for peer in nodes:
-            peer.receive_vote(v_prevote)
-
-    # All nodes precommit after prevote quorum
-    for node in nodes:
-        assert node.consensus.check_prevote_quorum(1, 0) == block1.block_hash
-        v_precommit = node.consensus.create_precommit(block1.block_hash)
-        for peer in nodes:
-            peer.receive_vote(v_precommit)
-
-    # All nodes finalize block 1
-    for node in nodes:
-        final_hash = node.consensus.check_precommit_quorum(1, 0)
-        assert final_hash == block1.block_hash
-        node.finalize_block(block1)
-
-    # Assert state agreement across all nodes
-    root = nodes[0].latest_state_root
-    for node in nodes:
-        assert node.latest_state_root == root
-        assert len(node.finalized_blocks) == 1
-
-
-def test_t2_duplicate_reordered_messages():
-    """T2: Duplicate/reordered messages -> No double-counted votes, no conflicting finalization."""
-    chain_id, nodes, key_pairs = setup_cluster(8)
-    node = nodes[0]
-    val_set = set(node.validator_keys)
-
-    vote = Vote(key_pairs[1].public_key_hex, 1, 0, VoteType.PREVOTE, "hash_x")
-    vote.sign(key_pairs[1], chain_id)
-
-    # Ingest vote once
-    assert node.consensus.lock_state.add_received_vote(vote, chain_id, val_set) is True
-    # Duplicate vote rejected
-    assert node.consensus.lock_state.add_received_vote(vote, chain_id, val_set) is False
-
-    # Check vote counts
-    votes = node.consensus.lock_state.get_votes_for_phase(1, 0, VoteType.PREVOTE)
-    assert len(votes) == 1
+    assert receiver.pending_transactions == []
+    assert any(
+        entry["type"] == "message_rejected"
+        and entry["details"]["reason"] == "invalid_signature_or_ownership"
+        for entry in receiver.logger.entries
+    )
+    assert any(
+        entry["type"] == "vote_rejected"
+        and entry["details"]["reason"] == "invalid_signature_or_domain"
+        for entry in receiver.logger.entries
+    )
 
 
-def test_t3_invalid_signature_wrong_domain():
-    """T3: Invalid signature / wrong domain -> Message rejected, reason logged."""
-    chain_id = "chain_A"
-    kp = KeyPair()
-    tx = Transaction(kp.public_key_hex, f"{kp.public_key_hex}/msg", "val", 0)
+def test_t4_replayed_transaction_is_applied_at_most_once():
+    """T4: A transaction replay over the network cannot change finalized state twice."""
+    chain_id, nodes, key_pairs, runner = setup_runner()
+    proposer = next(
+        node
+        for node in nodes
+        if node.public_key_hex == node.consensus.get_proposer(height=1, round=0)
+    )
+    tx = make_transaction(key_pairs[0], chain_id, value="once")
+    assert runner.submit_transaction(tx, proposer.node_id) is True
+    assert runner.run_until_finalized(1, max_ticks=100) is True
+    ingress = nodes[0]
+    root_before = ingress.latest_state_root
+    assert ingress.state.records[tx.key] == "once"
 
-    # Sign under wrong domain
-    tx.signature = kp.sign(tx.payload_dict(), "TX:WRONG_CHAIN")
-
-    # Rejected when verifying against chain_A
-    assert tx.is_valid(chain_id) is False
-
-
-def test_t4_replayed_duplicate_transaction():
-    """T4: Replayed/duplicate transaction -> Applied at most once."""
-    chain_id = "test_chain"
-    kp = KeyPair()
-    state = State()
-
-    tx = Transaction(kp.public_key_hex, f"{kp.public_key_hex}/val", "123", 0)
-    tx.sign(kp, chain_id)
-
-    assert state.apply_transaction(tx, chain_id) is True
-    # Replay of same transaction must be rejected
-    assert state.apply_transaction(tx, chain_id) is False
-
-
-def test_t5_drop_delay_before_synchrony():
-    """T5: Drop/delay before synchrony -> Safety holds; no double finalization at same height."""
-    chain_id, nodes, key_pairs = setup_cluster(8)
-    sim = NetworkSimulator([n.node_id for n in nodes], seed=55, drop_rate=0.4, min_delay=1, max_delay=10)
-
-    # Ensure no conflicting finalization can ever occur
-    finalized_per_height = {}
-    for node in nodes:
-        for b in node.finalized_blocks:
-            h = b.header.height
-            if h in finalized_per_height:
-                assert finalized_per_height[h] == b.block_hash
-            else:
-                finalized_per_height[h] = b.block_hash
+    replay_receiver = nodes[1]
+    runner.simulator.send_message(
+        NetworkMessage(
+            MessageType.TX,
+            nodes[0].node_id,
+            replay_receiver.node_id,
+            2,
+            {"transaction": asdict(tx)},
+        )
+    )
+    runner.run_for(3)
+    assert replay_receiver.latest_state_root == root_before
+    assert replay_receiver.state.records[tx.key] == "once"
+    assert any(
+        entry["type"] == "message_rejected"
+        and entry["details"]["reason"] == "duplicate_replay_or_nonce"
+        for entry in replay_receiver.logger.entries
+    )
 
 
-def test_t6_proposer_silent_crashed():
-    """T6: Proposer silent/crashed -> Round timeout triggers, chain continues."""
-    chain_id, nodes, key_pairs = setup_cluster(8)
-    # Proposer for round 0 fails to propose -> round timeout occurs
-    for node in nodes:
-        node.consensus.advance_to_next_round()
-        assert node.consensus.round == 1
-    # Next proposer takes over
-    new_proposer = nodes[0].consensus.get_proposer(height=1, round=1)
-    assert new_proposer in nodes[0].validator_keys
+def test_t5_drop_and_delay_preserve_safety_and_recover_after_stabilization():
+    """T5: Faulty early delivery causes no split finality; the stable network recovers."""
+    chain_id, nodes, key_pairs, runner = setup_runner(
+        seed=23,
+        drop_rate=0.4,
+        stabilization_time=16,
+        max_delay=4,
+        timeout=8,
+    )
+    proposer = next(
+        node
+        for node in nodes
+        if node.public_key_hex == node.consensus.get_proposer(height=1, round=0)
+    )
+    assert runner.submit_transaction(make_transaction(key_pairs[0], chain_id), proposer.node_id)
+
+    assert runner.run_until_finalized(1, max_ticks=300) is True
+    assert any(entry["type"] == "drop" for entry in runner.simulator.logger.entries)
+    assert any(entry["type"] == "delay" for entry in runner.simulator.logger.entries)
+    assert runner.is_safe() is True
+    assert len({node.finalized_blocks[0].block_hash for node in nodes}) == 1
 
 
-def test_t7_byzantine_equivocation():
-    """T7: Up to f Byzantine validators equivocate -> No conflicting finalization."""
-    chain_id, nodes, key_pairs = setup_cluster(8)
-    # n=8, f=2. 2 byzantine nodes send conflicting votes
-    byzantine_keys = key_pairs[:2]
-    val_set = set(nodes[0].validator_keys)
+def test_t6_silent_proposer_times_out_and_next_round_finalizes():
+    """T6: A silent round-zero proposer times out and round one continues."""
+    chain_id, nodes, key_pairs, runner = setup_runner(seed=31, timeout=6)
+    round_zero_proposer = next(
+        node
+        for node in nodes
+        if node.public_key_hex == node.consensus.get_proposer(height=1, round=0)
+    )
+    runner.silent_nodes.add(round_zero_proposer.node_id)
+    round_one_proposer_key = nodes[0].consensus.get_proposer(height=1, round=1)
+    round_one_proposer = next(
+        node for node in nodes if node.public_key_hex == round_one_proposer_key
+    )
+    assert runner.submit_transaction(make_transaction(key_pairs[0], chain_id), round_one_proposer.node_id)
 
-    for bk in byzantine_keys:
-        v1 = Vote(bk.public_key_hex, 1, 0, VoteType.PREVOTE, "hash_block_A")
-        v1.sign(bk, chain_id)
-        v2 = Vote(bk.public_key_hex, 1, 0, VoteType.PREVOTE, "hash_block_B")
-        v2.sign(bk, chain_id)
+    assert runner.run_until_finalized(1, max_ticks=100) is True
+    assert all(node.finalized_blocks[0].header.round == 1 for node in nodes)
+    assert any(
+        entry["type"] == "round_timeout"
+        for node in nodes
+        for entry in node.logger.entries
+    )
 
-        # Honest nodes accept first, reject second conflicting vote
-        for node in nodes[2:]:
-            node.consensus.lock_state.add_received_vote(v1, chain_id, val_set)
-            node.consensus.lock_state.add_received_vote(v2, chain_id, val_set)
 
-    # Byzantine nodes cannot cause two different blocks to get quorum (quorum requires 5 votes, only 2 byzantine)
-    for node in nodes[2:]:
+def test_t7_byzantine_equivocation_cannot_form_a_false_quorum():
+    """T7: Two equivocal validators are counted once through delivered messages."""
+    chain_id, nodes, key_pairs, runner = setup_runner(
+        seed=47, timeout=100, auto_propose=False, max_delay=2
+    )
+    honest_nodes = nodes[2:]
+    for byzantine_index in range(2):
+        byzantine = nodes[byzantine_index]
+        for block_hash in ("block_A", "block_B"):
+            vote = Vote(
+                byzantine.public_key_hex,
+                1,
+                0,
+                VoteType.PREVOTE,
+                block_hash,
+            )
+            vote.sign(key_pairs[byzantine_index], chain_id)
+            for receiver in honest_nodes:
+                runner.simulator.send_message(
+                    NetworkMessage(
+                        MessageType.VOTE,
+                        byzantine.node_id,
+                        receiver.node_id,
+                        1,
+                        runner._vote_payload(vote),
+                    )
+                )
+
+    runner.run_for(4)
+    for node in honest_nodes:
+        votes = node.consensus.lock_state.get_votes_for_phase(1, 0, VoteType.PREVOTE)
+        assert len(votes) == 2
         assert node.consensus.check_prevote_quorum(1, 0) is None
+        assert not node.finalized_blocks
+        assert sum(entry["type"] == "vote_rejected" for entry in node.logger.entries) == 2
 
 
-def test_t8_same_seed_rerun_twice():
-    """T8: Same seed rerun twice -> Byte-identical logs and final state hash."""
-    def run_simulation(seed):
-        chain_id, nodes, key_pairs = setup_cluster(8, seed=seed)
-        sim = NetworkSimulator([n.node_id for n in nodes], seed=seed)
-        # Produce transactions and log events
-        tx = Transaction(key_pairs[0].public_key_hex, f"{key_pairs[0].public_key_hex}/x", "1", 0)
-        tx.sign(key_pairs[0], chain_id)
-        nodes[0].state.apply_transaction(tx, chain_id)
-        nodes[0].logger.log_event(1, "tx_applied", 1, {"hash": tx.tx_hash})
-        return nodes[0].state.state_root, nodes[0].logger.export_canonical_bytes()
+def test_t8_same_seed_reproduces_final_state_and_all_logs():
+    """T8: Identical seed and inputs reproduce state, node logs, and transport logs."""
+    def run_once(seed):
+        chain_id, nodes, key_pairs, runner = setup_runner(seed=seed)
+        proposer = next(
+            node
+            for node in nodes
+            if node.public_key_hex == node.consensus.get_proposer(height=1, round=0)
+        )
+        assert runner.submit_transaction(
+            make_transaction(key_pairs[0], chain_id), proposer.node_id
+        )
+        assert runner.run_until_finalized(1, max_ticks=100) is True
+        return (
+            tuple(node.latest_state_root for node in nodes),
+            tuple(
+                tuple(block.block_hash for block in node.finalized_blocks)
+                for node in nodes
+            ),
+            tuple(node.logger.export_canonical_bytes() for node in nodes),
+            runner.simulator.logger.export_canonical_bytes(),
+        )
 
-    state_root1, logs1 = run_simulation(seed=999)
-    state_root2, logs2 = run_simulation(seed=999)
-
-    assert state_root1 == state_root2
-    assert logs1 == logs2
+    assert run_once(999) == run_once(999)

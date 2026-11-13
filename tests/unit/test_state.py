@@ -1,7 +1,6 @@
 """
 Unit tests for state execution, ownership verification, and replay protection.
 """
-import pytest
 from src.crypto.identity import KeyPair
 from src.execution.transaction import Transaction
 from src.execution.state import State
@@ -53,3 +52,23 @@ def test_nonce_ordering():
     )
     tx_nonce1.sign(alice_keys, chain_id)
     assert state.apply_transaction(tx_nonce1, chain_id) is False
+
+
+def test_state_root_commits_sender_nonce():
+    chain_id = "test_chain"
+    alice_keys = KeyPair()
+    key = f"{alice_keys.public_key_hex}/status"
+    state = State({key: "active"})
+    root_before = state.state_root
+
+    tx = Transaction(
+        sender=alice_keys.public_key_hex,
+        key=key,
+        value="active",
+        nonce=0,
+    )
+    tx.sign(alice_keys, chain_id)
+
+    assert state.apply_transaction(tx, chain_id) is True
+    assert state.records == {key: "active"}
+    assert state.state_root != root_before

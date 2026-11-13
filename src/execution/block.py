@@ -1,7 +1,7 @@
 """
 Block and BlockHeader data structures.
 Rules:
-- Header commits to parent_hash, height, and resulting state_root.
+- Header commits to parent_hash, height, state_root, and ordered transactions.
 - Header is signed by proposer under context HEADER:{chain_id}.
 """
 from dataclasses import dataclass, field
@@ -19,6 +19,7 @@ class BlockHeader:
     state_root: str
     proposer: str
     signature: str = ""
+    transactions_root: str = ""
 
     def payload_dict(self) -> Dict[str, Any]:
         """Dictionary used for hashing and signature (excluding signature)."""
@@ -28,6 +29,7 @@ class BlockHeader:
             "round": self.round,
             "state_root": self.state_root,
             "proposer": self.proposer,
+            "transactions_root": self.transactions_root,
         }
 
     @property
@@ -61,3 +63,8 @@ class Block:
     @property
     def block_hash(self) -> str:
         return self.header.header_hash
+
+    @property
+    def transactions_root(self) -> str:
+        """Commit to the ordered transaction list carried by this block."""
+        return hash_data([tx.tx_hash for tx in self.transactions])

@@ -1,9 +1,8 @@
-\documentclass[11pt,a4paper]{report}
+\documentclass[10pt,a4paper]{report}
 
 % --- Unicode fonts (compiled with XeLaTeX) ---
 \usepackage{fontspec}
 \setmainfont{Times New Roman}
-\usepackage[vietnamese]{babel}
 \usepackage{hyperref}
 \usepackage{graphicx}
 \usepackage{tikz}
@@ -15,7 +14,6 @@
 \usepackage{xcolor}
 \usepackage{tabularx}
 \usepackage{caption}
-\captionsetup[table]{position=top}
 \usepackage{subcaption}
 \usepackage{float}
 \usepackage{enumitem}
@@ -28,6 +26,10 @@
 \setlist{itemsep=2pt,topsep=4pt}
 
 \begin{document}
+\renewcommand{\chaptername}{Chương}
+\renewcommand{\contentsname}{Mục lục}
+\renewcommand{\figurename}{Hình}
+\renewcommand{\tablename}{Bảng}
 
 % -------------------- Cover --------------------
 \begin{titlepage}
@@ -115,7 +117,7 @@ Các mục tiêu của project gồm:
 \end{itemize}
 
 \section{Phạm vi}
-Mã nguồn hiện thực các cấu trúc và hành vi cốt lõi ở mức mô phỏng. Phần network simulator có hàng đợi sự kiện và inbox cho node; tuy nhiên, repo hiện chưa có một vòng chạy tổng thể tự động nối việc gửi message, gọi xử lý message tại node, timeout, đề xuất block và chốt block thành một tiến trình duy nhất. Vì vậy, kết quả cần được hiểu trong phạm vi từng thành phần và test hiện có.
+Mã nguồn hiện thực các cấu trúc và hành vi cốt lõi ở mức mô phỏng. NetworkRunner nối transport với handler của node, timeout, proposal, hai phase vote và finalization. Mô phỏng mặc định dùng tám validator đúng; các test fault-injection kích hoạt drop, duplicate, proposer im lặng và equivocation.
 
 \chapter{Kiến trúc hệ thống}
 \section{Các tầng chính}
@@ -124,7 +126,7 @@ Project được chia thành các tầng với trách nhiệm riêng:
   \item[Crypto] \texttt{src/crypto/} quản lý khóa, chữ ký, hash và biểu diễn dữ liệu.
   \item[Execution] \texttt{src/execution/} định nghĩa transaction, block và trạng thái key-value.
   \item[Consensus] \texttt{src/consensus/} tạo phiếu, đếm quorum và giữ trạng thái khóa.
-  \item[Network] \texttt{src/network/} mô phỏng message, lịch giao nhận và log sự kiện.
+  \item[Network] \texttt{src/network/} mô phỏng message, lịch giao nhận, event loop và log sự kiện.
   \item[Node] \texttt{src/node.py} kết hợp state, consensus, block buffer và transaction pool cục bộ.
 \end{description}
 
@@ -170,9 +172,14 @@ Transaction gồm sender, state key, giá trị mới, nonce và chữ ký. Payl
 Hash giao dịch được tính xác định từ payload. State từ chối transaction không hợp lệ hoặc nonce đã được dùng, nhằm giới hạn việc phát lại transaction. Các kiểm tra này được thể hiện trong \texttt{src/execution/transaction.py} và \texttt{src/execution/state.py}.
 
 \section{Block và state root}
-Header chứa parent hash, chiều cao, round, state root và proposer. Proposer ký header theo domain \texttt{HEADER:<chain\_id>}. Block hash bắt nguồn từ payload của header. Khi tạo proposal, node thực thi thử các transaction trên bản sao state để đưa state root sau thực thi vào header.
+Header chứa parent hash, chiều cao, round, state root, transaction root và proposer. Proposer ký header theo domain \texttt{HEADER:<chain\_id>}. Block hash bắt nguồn từ payload của header. Khi tạo proposal, node thực thi thử các transaction trên bản sao state để đưa state root sau thực thi vào header.
 
-State root là hash đại diện cho trạng thái hiện tại. Thay đổi dữ liệu sẽ làm thay đổi root, giúp node so sánh trạng thái sau khi thực thi. Repo cũng có cấu trúc Merkle Patricia Trie và kiểm tra proof ở các phần liên quan đến state.
+State root là hash đại diện cho trạng thái hiện tại. Thay đổi dữ liệu hoặc nonce sẽ làm thay đổi root, giúp node so sánh trạng thái sau khi thực thi. Root hiện được tính bằng SHA-256 trên biểu diễn canonical của các cặp key--value và nonce theo sender. Repo chưa hiện thực Merkle Patricia Trie hoặc proof.
+
+Header ký cả state root lẫn transaction root theo thứ tự transaction. Trước khi prevote, node kiểm tra chữ ký proposer, proposer theo lịch, parent hash, transaction root và state root sau khi thực thi. Khi chốt, node kiểm tra lại block và yêu cầu quorum PRECOMMIT. Nếu một transaction không hợp lệ hoặc root không khớp, node không cập nhật state và không tăng height.
+
+\section{Lỗi phát hiện và cách xử lý}
+Rà soát mã cho thấy hàm finalize cũ bỏ qua kết quả thực thi block, nên có thể tăng height dù transaction không hợp lệ. Node hiện thực thi thử trên state copy, kiểm tra root và chỉ commit sau khi có quorum PRECOMMIT. Engine cũng cần tính vote do chính validator ký vào quorum; vote cục bộ hiện được ghi nhận cùng luồng kiểm tra vote nhận. State root cũ bỏ qua nonce dù nonce ảnh hưởng transaction hợp lệ tiếp theo; root hiện cam kết cả nonce sender. Cuối cùng, header cũ không cam kết danh sách transaction; transaction root được thêm vào header và chữ ký proposer.
 
 \chapter{Đồng thuận BFT}
 \section{Hai pha bỏ phiếu}
@@ -202,46 +209,56 @@ Engine chọn proposer theo vòng luân phiên xác định từ height và roun
 \end{figure}
 
 \section{Khóa và chống phiếu trùng}
-ConsensusLockState ghi nhận phiếu đã ký của node và phiếu nhận từ peer. Nó từ chối phiếu từ validator không thuộc validator set, chữ ký không hợp lệ, phiếu trùng và phiếu thứ hai của cùng validator trong cùng height/round/phase. Trạng thái khóa giúp hạn chế việc chuyển sang block khác tùy tiện giữa các round.
+ConsensusLockState ghi nhận phiếu đã ký của node và phiếu nhận từ peer. Nó từ chối phiếu từ validator không thuộc validator set, chữ ký không hợp lệ, phiếu trùng và phiếu thứ hai của cùng validator trong cùng height/round/phase. Engine chỉ tạo PRECOMMIT sau khi quan sát quorum PREVOTE; trạng thái khóa được cập nhật khi quorum PREVOTE cho một block được ghi nhận.
 
 Nếu proposer không hoạt động, engine có thể tăng round và chọn proposer tiếp theo. Việc tăng round được mô hình hóa qua hàm chuyển round; xử lý timeout thực tế ở cấp toàn mạng còn tùy phần điều phối simulator.
 
 \chapter{Mô phỏng mạng và ghi log}
 \section{Network simulator}
-NetworkSimulator dùng seed để tạo các quyết định ngẫu nhiên có thể tái lập. Trước thời điểm ổn định, message có thể bị drop, delay hoặc duplicate. Message được xếp vào hàng đợi ưu tiên theo thời gian giao nhận; khi mô phỏng tiến một tick, các message đến hạn được chuyển vào inbox của người nhận.
+NetworkSimulator dùng seed để tạo quyết định drop, delay, duplicate và thứ tự giao nhận có thể tái lập. Mỗi node có giới hạn outbound theo cửa sổ thời gian; simulator có thể block/unblock một cặp peer và log các sự kiện mạng. NetworkRunner đăng ký handler cho mỗi node và điều phối round timeout, proposal, vote và finalization.
 
-Simulator hiện mô tả cơ chế truyền và phân phối message. Nó chưa tự gọi handler của Node hay tự tạo các phiếu consensus. Do đó test mạng cần được hiểu là kiểm tra các chức năng đã được nối cụ thể trong từng test, không mặc định rằng mọi kịch bản chạy qua một mạng BFT hoàn chỉnh.
+Block được truyền theo hai bước: node nhận kiểm tra header và chữ ký trước, rồi gửi \texttt{BODY\_REQUEST}; proposer chỉ gửi body theo yêu cầu đó. Node kiểm tra lại transaction root, chữ ký transaction và state root sau khi thực thi trước khi prevote. Transaction và vote đi qua NetworkSimulator; quyết định của node chỉ dựa trên header, body và vote đã nhận tại node đó.
 
 \section{Log xác định}
 Logger ghi sự kiện theo dạng canonical để có thể so sánh byte log giữa hai lần chạy cùng seed. Khả năng tái lập giúp debug: khi kết quả khác nhau, có thể kiểm tra sự kiện nào, ở thời điểm nào, đã dẫn đến sai khác.
 
 \chapter{Kiểm thử}
-Repo tổ chức test thành \texttt{tests/unit/} và \texttt{tests/e2e/}. Unit test tập trung vào crypto, state và quy tắc consensus. Bộ kịch bản E2E được mô tả trong \texttt{tests/e2e/test\_scenarios.py}, gồm:
+Repo tổ chức test thành \texttt{tests/unit/} và \texttt{tests/e2e/}. Unit test kiểm tra crypto, state, consensus, giới hạn outbound và peer blocking. Các scenario T1--T8 chạy qua NetworkRunner/NetworkSimulator với phạm vi sau:
 \begin{description}[style=nextline,leftmargin=0pt]
-  \item[T1 -- Chạy bình thường] Các node chốt cùng block và state root.
-  \item[T2 -- Message trùng hoặc sai thứ tự] Không đếm phiếu trùng; xử lý đúng phiếu đến đảo thứ tự.
-  \item[T3 -- Chữ ký/domain sai] Từ chối thông điệp có chữ ký hoặc chain context không hợp lệ.
-  \item[T4 -- Transaction phát lại] Chỉ áp dụng transaction hợp lệ tối đa một lần.
-  \item[T5 -- Mất/trễ message] Kiểm tra safety, tức không chốt hai block khác nhau tại cùng height.
-  \item[T6 -- Proposer dừng] Mô hình hóa timeout và chuyển sang round/proposer tiếp theo.
-  \item[T7 -- Byzantine equivocation] Kiểm tra phiếu mâu thuẫn từ validator Byzantine không tạo quorum giả.
-  \item[T8 -- Chạy lại cùng seed] So sánh state root và log canonical giữa hai lần chạy.
+  \item[T1 -- Bình thường] Proposal, header/body, hai phase vote và finalization qua mạng; mọi node chốt cùng block và state root.
+  \item[T2 -- Duplicate/reorder] Bật duplicate và delay ngẫu nhiên; không đếm vote lặp và không chia finality.
+  \item[T3--T4 -- Transaction lỗi/phát lại] Gửi transaction sai domain và replay qua message handler; node từ chối và log lý do.
+  \item[T5 -- Drop/delay] Trước synchrony, drop/delay message; sau synchrony, các node chốt cùng block và không có hai hash final tại cùng height.
+  \item[T6 -- Proposer im lặng] Bỏ qua proposer round 0; timeout đưa mạng sang round 1 và block vẫn được chốt.
+  \item[T7 -- Equivocation] Hai validator ký vote mâu thuẫn gửi qua transport; mỗi node tính tối đa một vote mỗi validator/phase và không tạo quorum giả.
+  \item[T8 -- Tái lập] Cùng seed tạo cùng block/state root và byte log của mọi node lẫn transport.
 \end{description}
 
-Có thể gọi toàn bộ test bằng lệnh \texttt{python -m tests.run\_all\_tests}. Các kịch bản mô tả mục tiêu kiểm tra; mức độ bao phủ thực tế phụ thuộc vào phần logic mà từng test trực tiếp gọi. Đặc biệt, một số test fault-injection hiện chỉ kiểm tra thành phần hoặc trạng thái ban đầu, chưa tạo đầy đủ một cuộc chạy nhiều node qua NetworkSimulator.
+Lần chạy entry point cho kết quả 21/21 test đạt. T5 xác nhận safety và hội tụ trong cấu hình fault-injection đã chọn; đây là kiểm thử thực nghiệm hữu hạn, không phải chứng minh hình thức cho mọi lịch message.
+
+Có thể gọi test bằng \texttt{python -m tests.run\_all\_tests}; cùng lệnh này chạy trong GitHub Actions khi push hoặc pull request. Mô phỏng một block có thể chạy bằng \texttt{python run\_simulation.py}; log canonical có thể ghi ra thư mục mới bằng tùy chọn \texttt{--write-logs}.
 
 \chapter{Giới hạn và hướng phát triển}
 \begin{itemize}
-  \item Bổ sung bộ điều phối event loop để nối simulator với Node handlers, timeout và các bước consensus.
-  \item Kiểm tra chặt header/block trước khi vote: proposer hợp lệ, parent hash, height, chữ ký và state root sau thực thi.
-  \item Mở rộng test fault-injection thành các lượt chạy thực sự có drop, delay, duplicate và Byzantine node.
-  \item Bổ sung kiểm tra state root/proof độc lập và quản lý nonce theo từng sender rõ ràng.
-  \item Ghi lại cấu hình, log và kết quả đầu ra cho mỗi kịch bản để báo cáo có thể tái lập.
+  \item Bổ sung đồng bộ/catch-up cho node bỏ lỡ nhiều height và phục hồi qua restart.
+  \item Mở rộng Byzantine fault runner để tự động sinh proposal lỗi, equivocation và replay qua nhiều height.
+  \item Bổ sung kiểm tra độc lập cho state root/proof và lưu bền nonce theo sender.
+  \item Mở rộng ma trận fault-injection để kiểm tra nhiều seed, mức drop và cửa sổ ổn định.
 \end{itemize}
 
 \chapter{Kết luận}
 Project cung cấp mô hình cơ bản để học cách một node blockchain xử lý transaction, tạo block, bỏ phiếu BFT và cập nhật state. Việc tách crypto, execution, consensus và network giúp từng mối quan tâm dễ đọc và kiểm tra hơn. Các test hiện có minh họa nhiều tình huống quan trọng như chữ ký sai, transaction bị phát lại, phiếu trùng và log xác định.
 
-Để tiến gần hơn tới một simulator đầu-cuối, bước tiếp theo quan trọng là tích hợp các module thành một vòng chạy mạng hoàn chỉnh và làm cho từng kịch bản fault-injection thực sự đi qua vòng đó.
+NetworkRunner hiện điều phối luồng một height qua mạng mô phỏng. Bước tiếp theo là bổ sung catch-up khi node bỏ lỡ height và mở rộng fault-injection nhiều height, nhiều lịch message.
+
+\section*{Tài liệu tham khảo}
+\begin{enumerate}[leftmargin=*,itemsep=0pt,topsep=2pt]
+  \sloppy
+  \item Blockchain course, \emph{Lab 01} (đề bài cung cấp, 2026).
+  \item Knowledge Engineering Department, HCMUS, \emph{Lab 01: Node Architecture, Clients, and State Synchronization}, slides, 6 Nov 2025.
+  \item cryptography contributors, \emph{Ed25519 signing}, \url{https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ed25519/}.
+  \item pytest contributors, \emph{pytest documentation}, \url{https://docs.pytest.org/en/stable/}.
+  \item GitHub, \emph{Workflow syntax for GitHub Actions}, \url{https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions}.
+\end{enumerate}
 
 \end{document}

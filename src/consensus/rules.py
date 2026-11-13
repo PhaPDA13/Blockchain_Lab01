@@ -24,10 +24,21 @@ class ConsensusLockState:
         # Enforces Rule 7: count at most one valid vote per validator for (height, round, phase)
         self._received_votes: Dict[Tuple[int, int, str, str], Vote] = {}
 
-    def reset_for_height(self):
+    def reset_for_height(self, next_height: Optional[int] = None):
         """Reset locking state when advancing to a new height."""
         self.locked_block_hash = None
         self.locked_round = -1
+        if next_height is not None:
+            self._signed_votes = {
+                key: block_hash
+                for key, block_hash in self._signed_votes.items()
+                if key[0] >= next_height
+            }
+            self._received_votes = {
+                key: vote
+                for key, vote in self._received_votes.items()
+                if key[0] >= next_height
+            }
 
     def can_sign_vote(self, height: int, round: int, phase: VoteType) -> bool:
         """Rules 1 & 2: At most one PREVOTE and one PRECOMMIT per (height, round)."""
@@ -50,7 +61,10 @@ class ConsensusLockState:
         if block_hash == self.locked_block_hash:
             return True
         # Unlock condition: observed quorum of PREVOTE for different block in later round
-        if quorum_prevote_hash == block_hash and quorum_round > self.locked_round:
+        if (
+            quorum_prevote_hash == block_hash
+            and self.locked_round < quorum_round < current_round
+        ):
             return True
         return False
 
@@ -59,7 +73,7 @@ class ConsensusLockState:
         Rule 4: When a validator observes a quorum of PREVOTE messages for a non-NIL block,
         it locks that block and records the corresponding round.
         """
-        if block_hash:
+        if block_hash and round > self.locked_round:
             self.locked_block_hash = block_hash
             self.locked_round = round
 
@@ -69,7 +83,12 @@ class ConsensusLockState:
         from each validator for a given (height, round, phase).
         Returns True if vote is accepted as new valid vote, False if duplicate or invalid.
         """
-        if vote.validator not in validator_set:
+        if (
+            vote.validator not in validator_set
+            or vote.height < 1
+            or vote.round < 0
+            or not isinstance(vote.phase, VoteType)
+        ):
             return False
 
         if not vote.is_valid(chain_id):

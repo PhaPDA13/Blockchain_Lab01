@@ -18,8 +18,16 @@ ENV/
 # Temporary / Log files
 tmp/
 *.log
+*.aux
+*.out
+*.fls
+*.fdb_latexmk
+*.xdv
+*.toc
 logs/*
 !logs/.gitkeep
+Lab01_*/
+Lab01_*.zip
 
 # IDE / Editor files
 .vscode/

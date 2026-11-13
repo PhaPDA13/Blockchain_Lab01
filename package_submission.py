@@ -1,65 +1,81 @@
-"""
-Helper script to package the project according to Section 10 of Lab01.pdf:
-"Students create a folder Lab01_ID1_ID2_ID3_ID4_ID5 containing:
-src/, tests/, logs/, config/, README.md, REPORT.pdf
-Compress the above folder into Lab01_ID1_ID2_ID3_ID4_ID5.zip for submission."
-"""
-import os
+"""Package the files required for a Lab 01 submission."""
+import argparse
 import shutil
 import zipfile
-import argparse
+from pathlib import Path
+
+
+REQUIRED_ITEMS = (
+    "src",
+    "tests",
+    "logs",
+    "config",
+    "run_simulation.py",
+    "README.md",
+    "REPORT.pdf",
+)
+IGNORED_ITEMS = shutil.ignore_patterns("__pycache__", ".pytest_cache", "*.pyc", ".coverage")
 
 
 def package(student_ids):
     if not student_ids:
-        raise ValueError("Must provide at least one student ID (MSSV).")
+        raise ValueError("Provide at least one student ID (MSSV).")
+    if any(not student_id.isdigit() for student_id in student_ids):
+        raise ValueError("Student IDs must contain digits only.")
+    if len(set(student_ids)) != len(student_ids):
+        raise ValueError("Student IDs must be unique.")
 
+    project_dir = Path(__file__).resolve().parent
     folder_name = "Lab01_" + "_".join(student_ids)
-    print(f"Preparing package: {folder_name} ...")
+    target_dir = project_dir / folder_name
+    zip_path = project_dir / f"{folder_name}.zip"
+    if target_dir.resolve().parent != project_dir:
+        raise ValueError("The submission folder must stay inside the project directory.")
 
-    target_dir = os.path.join(os.getcwd(), folder_name)
-    if os.path.exists(target_dir):
-        shutil.rmtree(target_dir)
-    os.makedirs(target_dir)
+    if target_dir.exists() or zip_path.exists():
+        raise FileExistsError(
+            f"{folder_name} or its ZIP already exists; move it before packaging again."
+        )
 
-    # Required items
-    items_to_copy = ["src", "tests", "logs", "config", "README.md", "REPORT.pdf"]
+    missing = [name for name in REQUIRED_ITEMS if not (project_dir / name).exists()]
+    if missing:
+        raise FileNotFoundError("Required submission items are missing: " + ", ".join(missing))
 
-    for item in items_to_copy:
-        src_path = os.path.join(os.getcwd(), item)
-        dst_path = os.path.join(target_dir, item)
-
-        if os.path.isdir(src_path):
-            shutil.copytree(src_path, dst_path)
-            print(f"  [+] Copied folder: {item}/")
-        elif os.path.isfile(src_path):
-            shutil.copy2(src_path, dst_path)
-            print(f"  [+] Copied file: {item}")
-        else:
-            if item == "REPORT.pdf":
-                print(f"  [!] Note: {item} does not exist yet. Please put your report file before final zip.")
+    target_dir.mkdir()
+    zip_created = False
+    try:
+        for item in REQUIRED_ITEMS:
+            source = project_dir / item
+            destination = target_dir / item
+            if source.is_dir():
+                shutil.copytree(source, destination, ignore=IGNORED_ITEMS)
             else:
-                print(f"  [!] Warning: {item} not found!")
+                shutil.copy2(source, destination)
 
-    # Create zip
-    zip_filename = f"{folder_name}.zip"
-    with zipfile.ZipFile(zip_filename, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(target_dir):
-            for file in files:
-                abs_path = os.path.join(root, file)
-                rel_path = os.path.relpath(abs_path, os.getcwd())
-                zipf.write(abs_path, rel_path)
+        archive_file = zipfile.ZipFile(zip_path, "x", zipfile.ZIP_DEFLATED)
+        zip_created = True
+        with archive_file as archive:
+            for source in sorted(target_dir.rglob("*")):
+                if source.is_file():
+                    archive.write(source, source.relative_to(project_dir))
+    except Exception:
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+        if zip_created and zip_path.exists():
+            zip_path.unlink()
+        raise
 
-    print(f"\nSuccessfully generated submission file: {zip_filename}")
+    print(f"Created submission folder: {target_dir}")
+    print(f"Created submission archive: {zip_path}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Package Lab 01 submission zip.")
+    parser = argparse.ArgumentParser(description="Package the Lab 01 submission.")
     parser.add_argument(
         "--ids",
         nargs="+",
         required=True,
-        help="List of student IDs, e.g. --ids 2310315 or --ids 2310315 2310316",
+        help="Student IDs, e.g. --ids 23120273 231204281",
     )
     args = parser.parse_args()
     package(args.ids)

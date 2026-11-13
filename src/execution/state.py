@@ -28,8 +28,13 @@ class State:
 
     @property
     def state_root(self) -> str:
-        """Deterministic commitment hash of the current state."""
-        return compute_state_root(self._records)
+        """Commit to application records and nonce state used during execution."""
+        return compute_state_root(
+            {
+                "records": self._records,
+                "sender_nonces": self._sender_nonces,
+            }
+        )
 
     def apply_transaction(self, tx: Transaction, chain_id: str) -> bool:
         """
