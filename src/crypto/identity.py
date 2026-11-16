@@ -5,7 +5,7 @@ Required contexts:
 - HEADER:{chain_id}
 - VOTE:{chain_id}
 """
-from typing import Tuple
+from typing import Optional
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from .encoding import canonical_encode
 
@@ -13,7 +13,7 @@ from .encoding import canonical_encode
 class KeyPair:
     """Manages an Ed25519 public/private keypair."""
 
-    def __init__(self, private_key: ed25519.Ed25519PrivateKey = None):
+    def __init__(self, private_key: Optional[ed25519.Ed25519PrivateKey] = None):
         if private_key is None:
             self._private_key = ed25519.Ed25519PrivateKey.generate()
         else:

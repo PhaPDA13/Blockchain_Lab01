@@ -61,6 +61,27 @@ class Node:
         if not self.consensus.is_current_proposer():
             raise ValueError("This validator is not the proposer for the current round.")
 
+        locked_hash = self.consensus.lock_state.locked_block_hash
+        locked_block = next(
+            (
+                candidate
+                for candidate in self.received_blocks.values()
+                if locked_hash and candidate.block_hash == locked_hash
+            ),
+            None,
+        )
+        if locked_block is not None:
+            header = BlockHeader(
+                parent_hash=locked_block.header.parent_hash,
+                height=self.consensus.height,
+                round=self.consensus.round,
+                state_root=locked_block.header.state_root,
+                proposer=self.public_key_hex,
+                transactions_root=locked_block.header.transactions_root,
+            )
+            header.sign(self.key_pair, self.chain_id)
+            return Block(header=header, transactions=list(locked_block.transactions))
+
         temp_state = self.state.copy()
         valid_txs = []
         for tx in self.pending_transactions:
@@ -143,15 +164,24 @@ class Node:
         """Validate and store a proposal before signing a PREVOTE for it."""
         if not self.validate_proposal_block(block):
             return None
-        self.received_blocks[block.block_hash] = block
+        self.received_blocks[block.header.header_hash] = block
         return self.consensus.create_prevote(block.block_hash)
 
-    def finalize_block(self, block: Block) -> bool:
+    def finalize_block(
+        self, block: Block, precommit_certificate: List[Vote] | None = None
+    ) -> bool:
         """Validate a committed block before updating state and advancing height."""
         header = block.header
         if not self.validate_proposal_block(block, require_current_round=False):
             return False
-        if self.consensus.check_precommit_quorum(header.height, header.round) != block.block_hash:
+        has_local_quorum = (
+            self.consensus.check_precommit_quorum(header.height, header.round)
+            == block.block_hash
+        )
+        has_certificate = precommit_certificate is not None and self.consensus.verify_precommit_certificate(
+            precommit_certificate, block.block_hash, header.height, header.round
+        )
+        if not has_local_quorum and not has_certificate:
             return False
 
         if not self.state.apply_block_transactions(block.transactions, self.chain_id):

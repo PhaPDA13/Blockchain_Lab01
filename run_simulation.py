@@ -10,9 +10,9 @@ from src.node import Node
 
 
 def build_nodes(config):
-    num_nodes = int(config.get("num_nodes", 8))
-    if num_nodes < 8:
-        raise ValueError("The Lab network must contain at least 8 validators.")
+    num_nodes = int(config.get("num_nodes", 10))
+    if num_nodes < 8 or (num_nodes - 1) % 3 != 0:
+        raise ValueError("Validator count must satisfy n = 3f + 1 and n >= 8.")
 
     seed = int(config.get("random_seed", 42))
     key_pairs = [

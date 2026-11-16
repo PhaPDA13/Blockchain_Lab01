@@ -1,6 +1,6 @@
 """
 BFT Consensus Engine implementing 2-phase agreement (Prevote and Precommit).
-n = 3f + 1, quorum = 2f + 1.
+For n validators and f = floor((n - 1) / 3), quorum = n - f.
 """
 from typing import List, Set, Optional, Dict
 from .vote import Vote, VoteType
@@ -23,9 +23,13 @@ class ConsensusEngine:
         self.key_pair = key_pair
         self.chain_id = chain_id
         self.validators = sorted(validators)
+        if not self.validators or len(set(self.validators)) != len(self.validators):
+            raise ValueError("The validator set must be non-empty and contain unique keys.")
         if key_pair.public_key_hex not in self.validators:
             raise ValueError("This node's public key must belong to the validator set.")
         self.n = len(self.validators)
+        if self.n < 4 or (self.n - 1) % 3 != 0:
+            raise ValueError("Validator count must satisfy n = 3f + 1.")
         self.f = (self.n - 1) // 3
         self.quorum_size = 2 * self.f + 1
 
@@ -168,6 +172,26 @@ class ConsensusEngine:
             if counts[h] >= self.quorum_size:
                 return h
         return None
+
+    def verify_precommit_certificate(
+        self, votes: List[Vote], block_hash: str, height: int, round: int
+    ) -> bool:
+        """Verify a portable finality proof without relying on local vote history."""
+        validators: Set[str] = set()
+        validator_set = set(self.validators)
+        for vote in votes:
+            if (
+                vote.validator not in validator_set
+                or vote.validator in validators
+                or vote.height != height
+                or vote.round != round
+                or vote.phase != VoteType.PRECOMMIT
+                or vote.block_hash != block_hash
+                or not vote.is_valid(self.chain_id)
+            ):
+                return False
+            validators.add(vote.validator)
+        return len(validators) >= self.quorum_size
 
     def advance_to_next_height(self):
         """Finalization complete: advance height and reset round and locks."""

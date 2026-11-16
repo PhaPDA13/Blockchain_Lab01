@@ -53,6 +53,9 @@ class NetworkRunner:
         self._last_vote_broadcast: Dict[Tuple[str, int, int, str], int] = {}
         self._header_history: Dict[Tuple[str, int, int], Dict[str, object]] = {}
         self._last_header_broadcast: Dict[Tuple[str, int, int], int] = {}
+        self._finalized_history: Dict[int, Tuple[str, Dict[str, object]]] = {}
+        self._last_finalized_broadcast: Dict[int, int] = {}
+        self._pending_finalized: Dict[str, Dict[int, Tuple[str, Dict[str, object]]]] = {}
         self._target_height: Optional[int] = None
         self.finalized_by_height: Dict[int, Dict[str, str]] = {}
         self.safety_violations: List[Tuple[int, str, str]] = []
@@ -64,8 +67,14 @@ class NetworkRunner:
     def from_config(cls, nodes: List[Node], config: Dict[str, object]) -> "NetworkRunner":
         """Build a runner and simulator from config/default_config.json values."""
         expected_nodes = int(config.get("num_nodes", len(nodes)))
-        if expected_nodes != len(nodes) or expected_nodes < 8:
-            raise ValueError("Config must match the supplied nodes and include at least 8 validators.")
+        if (
+            expected_nodes != len(nodes)
+            or expected_nodes < 8
+            or (expected_nodes - 1) % 3 != 0
+        ):
+            raise ValueError(
+                "Config must match supplied nodes and satisfy n = 3f + 1 with n >= 8."
+            )
         fault_budget = int(config.get("max_byzantine_faults", 0))
         if fault_budget < 0 or fault_budget > (expected_nodes - 1) // 3:
             raise ValueError("max_byzantine_faults exceeds the validator-set fault bound.")
@@ -86,7 +95,9 @@ class NetworkRunner:
         return cls(
             nodes,
             simulator,
-            round_timeout_ticks=int(config.get("timeout_round_ms", 1000)),
+            round_timeout_ticks=int(
+                config.get("timeout_round_ticks", config.get("timeout_round_ms", 1000))
+            ),
             retransmit_interval_ticks=int(config.get("retransmit_interval_ticks", 1000)),
         )
 
@@ -181,9 +192,10 @@ class NetworkRunner:
             node.finalized_blocks[-1].block_hash if node.finalized_blocks else "0" * 64
         )
         block = node.create_proposal_block(parent_hash)
-        self._blocks[block.block_hash] = block
-        node.received_headers[block.block_hash] = block.header
-        node.received_blocks[block.block_hash] = block
+        proposal_hash = block.header.header_hash
+        self._blocks[proposal_hash] = block
+        node.received_headers[proposal_hash] = block.header
+        node.received_blocks[proposal_hash] = block
         node.logger.log_event(
             self.simulator.current_time,
             "proposal",
@@ -191,7 +203,11 @@ class NetworkRunner:
             {"round": round_number, "hash": block.block_hash},
         )
 
-        payload = {"block_hash": block.block_hash, "header": asdict(block.header)}
+        payload = {
+            "block_hash": block.block_hash,
+            "proposal_hash": proposal_hash,
+            "header": asdict(block.header),
+        }
         self._header_history[proposal_key] = payload
         self._last_header_broadcast[proposal_key] = self.simulator.current_time
         self._broadcast(node.node_id, MessageType.HEADER, height, payload)
@@ -251,20 +267,120 @@ class NetworkRunner:
             )
             if quorum_hash != block.block_hash:
                 continue
-            if node.finalize_block(block):
-                finalized = self.finalized_by_height.setdefault(height, {})
-                prior_hashes = set(finalized.values())
-                if prior_hashes and block.block_hash not in prior_hashes:
-                    self.safety_violations.append(
-                        (height, min(prior_hashes), block.block_hash)
-                    )
-                finalized[node.node_id] = block.block_hash
-                node.logger.log_event(
-                    self.simulator.current_time,
-                    "finalize",
-                    height,
-                    {"hash": block.block_hash, "state_root": node.latest_state_root},
+            certificate = [
+                vote
+                for vote in node.consensus.lock_state.get_votes_for_phase(
+                    height, block.header.round, VoteType.PRECOMMIT
+                ).values()
+                if vote.block_hash == block.block_hash
+            ]
+            finality_payload = self._finalized_payload(block, certificate)
+            if node.finalize_block(block, certificate):
+                self._record_finalization(node, block)
+                self._remember_finalized(node.node_id, height, finality_payload)
+                self._process_pending_finalized(node)
+                break
+
+    def _record_finalization(self, node: Node, block: Block) -> None:
+        height = block.header.height
+        finalized = self.finalized_by_height.setdefault(height, {})
+        prior_hashes = set(finalized.values())
+        if prior_hashes and block.block_hash not in prior_hashes:
+            self.safety_violations.append(
+                (height, min(prior_hashes), block.block_hash)
+            )
+        finalized[node.node_id] = block.block_hash
+        node.logger.log_event(
+            self.simulator.current_time,
+            "finalize",
+            height,
+            {"hash": block.block_hash, "state_root": node.latest_state_root},
+        )
+
+    @staticmethod
+    def _finalized_payload(block: Block, certificate: List[Vote]) -> Dict[str, object]:
+        return {
+            "block_hash": block.block_hash,
+            "header": asdict(block.header),
+            "transactions": [NetworkRunner._transaction_payload(tx) for tx in block.transactions],
+            "precommits": [NetworkRunner._vote_payload(vote) for vote in certificate],
+        }
+
+    def _remember_finalized(
+        self, source_id: str, height: int, payload: Dict[str, object]
+    ) -> None:
+        if height not in self._finalized_history:
+            self._finalized_history[height] = (source_id, payload)
+            self._last_finalized_broadcast[height] = self.simulator.current_time
+        self._broadcast(source_id, MessageType.FINALIZED, height, payload)
+
+    def _parse_finalized_payload(
+        self, node: Node, payload: Dict[str, object]
+    ) -> Tuple[Block, List[Vote]] | None:
+        header = BlockHeader(**payload["header"])
+        transactions = [
+            self._transaction_from_payload(item) for item in payload["transactions"]
+        ]
+        block = Block(header, transactions)
+        if payload.get("block_hash") != block.block_hash:
+            return None
+        votes = [self._vote_from_payload(item) for item in payload["precommits"]]
+        if not node.consensus.verify_precommit_certificate(
+            votes, block.block_hash, header.height, header.round
+        ):
+            return None
+        return block, votes
+
+    def _handle_finalized(self, node: Node, message: NetworkMessage) -> None:
+        parsed = self._parse_finalized_payload(node, message.payload)
+        if parsed is None:
+            self._reject(node, message, "invalid_finality_certificate")
+            return
+        block, certificate = parsed
+        if message.height != block.header.height:
+            self._reject(node, message, "finality_height_mismatch")
+            return
+        if block.header.height < node.consensus.height:
+            known = node.finalized_blocks[block.header.height - 1]
+            if known.block_hash != block.block_hash:
+                self.safety_violations.append(
+                    (block.header.height, known.block_hash, block.block_hash)
                 )
+            return
+        if block.header.height > node.consensus.height:
+            self._pending_finalized.setdefault(node.node_id, {})[
+                block.header.height
+            ] = (message.sender_id, message.payload)
+            return
+        self._apply_finalized(node, message.sender_id, block, certificate, message.payload)
+
+    def _apply_finalized(
+        self,
+        node: Node,
+        source_id: str,
+        block: Block,
+        certificate: List[Vote],
+        payload: Dict[str, object],
+    ) -> bool:
+        if block.header.round > node.consensus.round:
+            node.consensus.round = block.header.round
+        if not node.finalize_block(block, certificate):
+            return False
+        self._record_finalization(node, block)
+        self._remember_finalized(source_id, block.header.height, payload)
+        self._process_pending_finalized(node)
+        return True
+
+    def _process_pending_finalized(self, node: Node) -> None:
+        pending = self._pending_finalized.get(node.node_id, {})
+        while node.consensus.height in pending:
+            height = node.consensus.height
+            source_id, payload = pending.pop(height)
+            parsed = self._parse_finalized_payload(node, payload)
+            if parsed is None:
+                continue
+            block, certificate = parsed
+            if not self._apply_finalized(node, source_id, block, certificate, payload):
                 break
 
     def _advance_timed_out_rounds(self) -> None:
@@ -275,8 +391,13 @@ class NetworkRunner:
             if self._target_height is not None and height >= self._target_height:
                 continue
             key = (node_id, height, round_number)
-            started = self._round_started.setdefault(key, 0)
-            if now - started < self.round_timeout_ticks:
+            # Start a newly observed round's timer now. Using tick 0 here causes
+            # later heights to time out immediately when the simulation is old.
+            started = self._round_started.setdefault(key, now)
+            # Give later rounds progressively more time for delayed proposals,
+            # body requests, and vote broadcasts to complete.
+            timeout_for_round = self.round_timeout_ticks * (round_number + 1)
+            if now - started < timeout_for_round:
                 continue
 
             old_proposer = node.consensus.get_proposer(height, round_number)
@@ -296,14 +417,25 @@ class NetworkRunner:
 
     def _retransmit(self) -> None:
         now = self.simulator.current_time
-        for proposal_key in sorted(self._header_history):
+        # Retransmit only the newest proposal per node and height. This lets a
+        # proposer that has moved rounds help lagging peers without repeatedly
+        # flooding every historical proposal from that height.
+        latest_headers: Dict[Tuple[str, int], Tuple[str, int, int]] = {}
+        for proposal_key in self._header_history:
+            node_id, height, round_number = proposal_key
+            group_key = (node_id, height)
+            previous = latest_headers.get(group_key)
+            if previous is None or round_number > previous[2]:
+                latest_headers[group_key] = proposal_key
+
+        for proposal_key in sorted(latest_headers.values()):
             if now - self._last_header_broadcast[proposal_key] < self.retransmit_interval_ticks:
                 continue
             node_id, height, _ = proposal_key
             if self._target_height is not None and height >= self._target_height:
                 continue
             node = self.nodes[node_id]
-            if node.consensus.height != height or node.consensus.round != proposal_key[2]:
+            if node.consensus.height != height:
                 continue
             self._broadcast(
                 node_id,
@@ -313,10 +445,24 @@ class NetworkRunner:
             )
             self._last_header_broadcast[proposal_key] = now
 
+        finalized_retransmit_interval = min(
+            self.retransmit_interval_ticks, self.round_timeout_ticks
+        )
+        for height, (source_id, payload) in sorted(self._finalized_history.items()):
+            if all(node.consensus.height > height for node in self.nodes.values()):
+                continue
+            if now - self._last_finalized_broadcast[height] < finalized_retransmit_interval:
+                continue
+            self._broadcast(source_id, MessageType.FINALIZED, height, payload)
+            self._last_finalized_broadcast[height] = now
+
         for vote_key in sorted(self._vote_history):
             if now - self._last_vote_broadcast[vote_key] < self.retransmit_interval_ticks:
                 continue
-            node_id, height, _, _ = vote_key
+            node_id, height, round_number, _ = vote_key
+            node = self.nodes[node_id]
+            if node.consensus.height != height or round_number > node.consensus.round:
+                continue
             self._broadcast(node_id, MessageType.VOTE, height, self._vote_history[vote_key])
             self._last_vote_broadcast[vote_key] = now
 
@@ -372,9 +518,11 @@ class NetworkRunner:
                 self._handle_body(node, message)
             elif message.msg_type == MessageType.VOTE:
                 self._handle_vote(node, message)
+            elif message.msg_type == MessageType.FINALIZED:
+                self._handle_finalized(node, message)
             else:
                 self._reject(node, message, "unsupported_message_type")
-        except (KeyError, TypeError, ValueError) as error:
+        except (KeyError, TypeError, ValueError, AttributeError) as error:
             self._reject(node, message, f"malformed_payload:{type(error).__name__}")
 
     def _handle_transaction(self, node: Node, message: NetworkMessage) -> None:
@@ -404,19 +552,21 @@ class NetworkRunner:
 
     def _handle_header(self, node: Node, message: NetworkMessage) -> None:
         header = BlockHeader(**message.payload["header"])
-        block_hash = header.header_hash
+        block_hash = header.block_id
+        proposal_hash = header.header_hash
         expected_sender = self._node_by_public_key.get(header.proposer)
         if (
             message.payload.get("block_hash") != block_hash
+            or message.payload.get("proposal_hash") != proposal_hash
             or message.height != header.height
             or expected_sender != message.sender_id
-            or not node.validate_proposal_header(header)
+            or not node.validate_proposal_header(header, require_current_round=False)
         ):
             self._reject(node, message, "invalid_or_unexpected_header")
             return
 
-        node.received_headers[block_hash] = header
-        self._body_requested.add((node.node_id, block_hash))
+        node.received_headers[proposal_hash] = header
+        self._body_requested.add((node.node_id, proposal_hash))
         node.logger.log_event(
             self.simulator.current_time,
             "header_accepted",
@@ -428,13 +578,18 @@ class NetworkRunner:
             message.sender_id,
             MessageType.BODY_REQUEST,
             header.height,
-            {"block_hash": block_hash},
+            {"block_hash": block_hash, "proposal_hash": proposal_hash},
         )
 
     def _handle_body_request(self, node: Node, message: NetworkMessage) -> None:
         block_hash = str(message.payload["block_hash"])
-        block = self._blocks.get(block_hash)
-        if block is None or block.header.proposer != node.public_key_hex:
+        proposal_hash = str(message.payload["proposal_hash"])
+        block = self._blocks.get(proposal_hash)
+        if (
+            block is None
+            or block.block_hash != block_hash
+            or block.header.proposer != node.public_key_hex
+        ):
             self._reject(node, message, "unknown_body_request")
             return
         self._send_to(
@@ -444,14 +599,16 @@ class NetworkRunner:
             block.header.height,
             {
                 "block_hash": block_hash,
+                "proposal_hash": proposal_hash,
                 "transactions": [self._transaction_payload(tx) for tx in block.transactions],
             },
         )
 
     def _handle_body(self, node: Node, message: NetworkMessage) -> None:
         block_hash = str(message.payload["block_hash"])
-        header = node.received_headers.get(block_hash)
-        if header is None or (node.node_id, block_hash) not in self._body_requested:
+        proposal_hash = str(message.payload["proposal_hash"])
+        header = node.received_headers.get(proposal_hash)
+        if header is None or (node.node_id, proposal_hash) not in self._body_requested:
             self._reject(node, message, "body_without_accepted_header")
             return
         expected_sender = self._node_by_public_key.get(header.proposer)
@@ -464,12 +621,18 @@ class NetworkRunner:
             for item in message.payload["transactions"]
         ]
         block = Block(header, transactions)
-        if block.block_hash != block_hash or not node.validate_proposal_block(block):
+        if (
+            block.block_hash != block_hash
+            or block.header.header_hash != proposal_hash
+            or not node.validate_proposal_block(
+            block, require_current_round=False
+            )
+        ):
             self._reject(node, message, "invalid_block_body_or_state_root")
             return
 
-        self._blocks[block_hash] = block
-        node.received_blocks[block_hash] = block
+        self._blocks[proposal_hash] = block
+        node.received_blocks[proposal_hash] = block
         node.logger.log_event(
             self.simulator.current_time,
             "body_accepted",

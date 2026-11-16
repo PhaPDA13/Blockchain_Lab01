@@ -43,6 +43,18 @@ class Transaction:
         Validate transaction ownership, context, and signature.
         Ownership rule: key must be owned by sender (e.g., key.startswith(sender + "/")).
         """
+        # Reject malformed values before calling string/crypto operations. Network
+        # payloads are untrusted and dataclass construction alone is not validation.
+        if (
+            not isinstance(self.sender, str)
+            or not isinstance(self.key, str)
+            or not isinstance(self.value, str)
+            or not isinstance(self.nonce, int)
+            or isinstance(self.nonce, bool)
+            or not isinstance(self.signature, str)
+        ):
+            return False
+
         # Ownership check
         if not self.key.startswith(f"{self.sender}/"):
             return False

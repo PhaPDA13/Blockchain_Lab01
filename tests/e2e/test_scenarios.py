@@ -10,7 +10,7 @@ from src.network.simulator import NetworkSimulator
 from src.node import Node
 
 
-def setup_cluster(num_nodes=8, seed=42):
+def setup_cluster(num_nodes=10, seed=42):
     chain_id = "lab01_test_chain"
     key_pairs = [KeyPair.from_seed(bytes([i + seed % 200] * 32)) for i in range(num_nodes)]
     validator_keys = [key_pair.public_key_hex for key_pair in key_pairs]
@@ -250,12 +250,12 @@ def test_t6_silent_proposer_times_out_and_next_round_finalizes():
 
 
 def test_t7_byzantine_equivocation_cannot_form_a_false_quorum():
-    """T7: Two equivocal validators are counted once through delivered messages."""
+    """T7: Up to f=3 equivocal validators cannot form a false quorum."""
     chain_id, nodes, key_pairs, runner = setup_runner(
         seed=47, timeout=100, auto_propose=False, max_delay=2
     )
     honest_nodes = nodes[2:]
-    for byzantine_index in range(2):
+    for byzantine_index in range(3):
         byzantine = nodes[byzantine_index]
         for block_hash in ("block_A", "block_B"):
             vote = Vote(
@@ -280,10 +280,10 @@ def test_t7_byzantine_equivocation_cannot_form_a_false_quorum():
     runner.run_for(4)
     for node in honest_nodes:
         votes = node.consensus.lock_state.get_votes_for_phase(1, 0, VoteType.PREVOTE)
-        assert len(votes) == 2
+        assert len(votes) == 3
         assert node.consensus.check_prevote_quorum(1, 0) is None
         assert not node.finalized_blocks
-        assert sum(entry["type"] == "vote_rejected" for entry in node.logger.entries) == 2
+        assert sum(entry["type"] == "vote_rejected" for entry in node.logger.entries) == 3
 
 
 def test_t8_same_seed_reproduces_final_state_and_all_logs():
@@ -310,3 +310,119 @@ def test_t8_same_seed_reproduces_final_state_and_all_logs():
         )
 
     assert run_once(999) == run_once(999)
+
+
+def test_new_height_round_timer_starts_at_current_simulation_time():
+    _, nodes, _, runner = setup_runner(timeout=8)
+    for node in nodes:
+        node.consensus.advance_to_next_height()
+    runner.simulator.current_time = 100
+
+    runner._advance_timed_out_rounds()
+
+    assert all(node.consensus.round == 0 for node in nodes)
+
+
+def test_from_config_reads_timeout_round_ticks():
+    _, nodes, _ = setup_cluster()
+    runner = NetworkRunner.from_config(
+        nodes,
+        {"num_nodes": 10, "timeout_round_ticks": 17},
+    )
+
+    assert runner.round_timeout_ticks == 17
+
+
+def test_late_round_header_and_body_are_accepted_for_finalization_checks():
+    _, nodes, _, runner = setup_runner()
+    proposer = next(
+        node
+        for node in nodes
+        if node.consensus.get_proposer(1, 0) == node.public_key_hex
+    )
+    receiver = next(node for node in nodes if node is not proposer)
+    block = proposer.create_proposal_block("0" * 64)
+    receiver.consensus.advance_to_next_round()
+
+    runner._handle_message(
+        NetworkMessage(
+            MessageType.HEADER,
+            proposer.node_id,
+            receiver.node_id,
+            1,
+            {
+                "block_hash": block.block_hash,
+                "proposal_hash": block.header.header_hash,
+                "header": asdict(block.header),
+            },
+        )
+    )
+    runner._handle_message(
+        NetworkMessage(
+            MessageType.BODY,
+            proposer.node_id,
+            receiver.node_id,
+            1,
+            {
+                "block_hash": block.block_hash,
+                "proposal_hash": block.header.header_hash,
+                "transactions": [runner._transaction_payload(tx) for tx in block.transactions],
+            },
+        )
+    )
+
+    assert any(
+        candidate.block_hash == block.block_hash and candidate.header.round == 0
+        for candidate in receiver.received_blocks.values()
+    )
+
+
+def test_finality_certificate_catches_up_a_lagging_node():
+    chain_id, nodes, key_pairs, runner = setup_runner()
+    proposer = next(
+        node
+        for node in nodes
+        if node.consensus.get_proposer(1, 0) == node.public_key_hex
+    )
+    receiver = next(node for node in nodes if node is not proposer)
+    block = proposer.create_proposal_block("0" * 64)
+    certificate = []
+    for key_pair in key_pairs[:7]:
+        vote = Vote(
+            key_pair.public_key_hex,
+            1,
+            0,
+            VoteType.PRECOMMIT,
+            block.block_hash,
+        )
+        vote.sign(key_pair, chain_id)
+        certificate.append(vote)
+
+    runner._handle_message(
+        NetworkMessage(
+            MessageType.FINALIZED,
+            proposer.node_id,
+            receiver.node_id,
+            1,
+            runner._finalized_payload(block, certificate),
+        )
+    )
+
+    assert receiver.consensus.height == 2
+    assert receiver.finalized_blocks[0].block_hash == block.block_hash
+
+
+def test_multi_height_recovery_after_early_message_faults():
+    _, nodes, _, runner = setup_runner(
+        seed=0,
+        drop_rate=0.1,
+        duplicate_rate=0.05,
+        stabilization_time=20,
+        max_delay=6,
+        timeout=8,
+    )
+
+    assert runner.run_until_finalized(1, max_ticks=500)
+    assert runner.run_until_finalized(2, max_ticks=2000)
+    assert runner.is_safe()
+    assert all(len(node.finalized_blocks) >= 2 for node in nodes)

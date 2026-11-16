@@ -11,6 +11,8 @@ REQUIRED_ITEMS = (
     "logs",
     "config",
     "run_simulation.py",
+    "requirements.txt",
+    "pytest.ini",
     "README.md",
     "REPORT.pdf",
 )
@@ -75,7 +77,7 @@ if __name__ == "__main__":
         "--ids",
         nargs="+",
         required=True,
-        help="Student IDs, e.g. --ids 23120273 231204281",
+        help="Student IDs, e.g. --ids 23120273 23120281 23120315 23120382",
     )
     args = parser.parse_args()
     package(args.ids)

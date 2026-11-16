@@ -1,6 +1,7 @@
 """
 Unit tests for consensus vote counting, locking rules, and quorum calculation.
 """
+import pytest
 from src.crypto.identity import KeyPair
 from src.consensus.rules import ConsensusLockState
 from src.consensus.vote import Vote, VoteType
@@ -40,39 +41,66 @@ def test_vote_deduplication_and_single_vote_rule():
     assert lock_state.add_received_vote(vote_conflict, chain_id, val_set) is False
 
 
+def test_mutating_submitted_or_returned_vote_does_not_change_consensus_state():
+    chain_id = "test_chain"
+    lock_state = ConsensusLockState()
+    val_key = KeyPair()
+    vote = Vote(val_key.public_key_hex, 1, 0, VoteType.PREVOTE, "block_a")
+    vote.sign(val_key, chain_id)
+    assert lock_state.add_received_vote(vote, chain_id, {val_key.public_key_hex})
+
+    vote.block_hash = "block_b"
+    returned = lock_state.get_votes_for_phase(1, 0, VoteType.PREVOTE)
+    returned[val_key.public_key_hex].block_hash = "block_c"
+
+    stored = lock_state.get_votes_for_phase(1, 0, VoteType.PREVOTE)
+    assert stored[val_key.public_key_hex].block_hash == "block_a"
+
+
 def test_quorum_calculation():
-    # 8 nodes: n = 8 -> f = (8 - 1) // 3 = 2 -> quorum = 2*2 + 1 = 5
-    validators = [KeyPair() for _ in range(8)]
+    # 10 nodes: n = 3f + 1, f = 3, quorum = 2f + 1 = 7.
+    validators = [KeyPair() for _ in range(10)]
     val_keys = [k.public_key_hex for k in validators]
     chain_id = "test_chain"
 
     engine = ConsensusEngine("node0", validators[0], chain_id, val_keys)
-    assert engine.f == 2
-    assert engine.quorum_size == 5
+    assert engine.f == 3
+    assert engine.quorum_size == 7
 
-    # Submit 4 prevotes (not enough)
-    for i in range(4):
+    # Submit 6 prevotes (not enough)
+    for i in range(6):
         v = Vote(validators[i].public_key_hex, 1, 0, VoteType.PREVOTE, "block_hash_1")
         v.sign(validators[i], chain_id)
         engine.lock_state.add_received_vote(v, chain_id, set(val_keys))
 
     assert engine.check_prevote_quorum(1, 0) is None
 
-    # 5th prevote reaches quorum
-    v5 = Vote(validators[4].public_key_hex, 1, 0, VoteType.PREVOTE, "block_hash_1")
-    v5.sign(validators[4], chain_id)
-    engine.lock_state.add_received_vote(v5, chain_id, set(val_keys))
+    # 7th prevote reaches quorum
+    v7 = Vote(validators[6].public_key_hex, 1, 0, VoteType.PREVOTE, "block_hash_1")
+    v7.sign(validators[6], chain_id)
+    engine.lock_state.add_received_vote(v7, chain_id, set(val_keys))
     assert engine.check_prevote_quorum(1, 0) == "block_hash_1"
 
 
-def test_precommit_requires_prevote_quorum():
+def test_validator_count_must_follow_n_equals_three_f_plus_one():
     validators = [KeyPair() for _ in range(8)]
+    with pytest.raises(ValueError, match=r"n = 3f \+ 1"):
+        ConsensusEngine(
+            "node0",
+            validators[0],
+            "test_chain",
+            [key.public_key_hex for key in validators],
+        )
+
+
+def test_precommit_requires_prevote_quorum():
+    validators = [KeyPair() for _ in range(10)]
     val_keys = [key.public_key_hex for key in validators]
     engine = ConsensusEngine("node0", validators[0], "test_chain", val_keys)
 
     assert engine.create_precommit("block_hash_1") is None
 
-    for key in validators[:5]:
+    for key in validators[:7]:
         vote = Vote(key.public_key_hex, 1, 0, VoteType.PREVOTE, "block_hash_1")
         vote.sign(key, "test_chain")
         assert engine.add_received_vote(vote) is True
@@ -82,7 +110,7 @@ def test_precommit_requires_prevote_quorum():
 
 
 def test_local_votes_count_toward_quorum():
-    validators = [KeyPair() for _ in range(8)]
+    validators = [KeyPair() for _ in range(10)]
     val_keys = [key.public_key_hex for key in validators]
     engine = ConsensusEngine("node0", validators[0], "test_chain", val_keys)
 
@@ -90,7 +118,7 @@ def test_local_votes_count_toward_quorum():
     assert prevote is not None
     assert len(engine.lock_state.get_votes_for_phase(1, 0, VoteType.PREVOTE)) == 1
 
-    for key in validators[1:5]:
+    for key in validators[1:7]:
         vote = Vote(key.public_key_hex, 1, 0, VoteType.PREVOTE, "block_hash_1")
         vote.sign(key, "test_chain")
         assert engine.add_received_vote(vote) is True
@@ -98,7 +126,7 @@ def test_local_votes_count_toward_quorum():
 
     precommit = engine.create_precommit("block_hash_1")
     assert precommit is not None
-    for key in validators[1:5]:
+    for key in validators[1:7]:
         vote = Vote(key.public_key_hex, 1, 0, VoteType.PRECOMMIT, "block_hash_1")
         vote.sign(key, "test_chain")
         assert engine.add_received_vote(vote) is True

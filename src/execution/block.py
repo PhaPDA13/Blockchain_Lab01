@@ -34,8 +34,20 @@ class BlockHeader:
 
     @property
     def header_hash(self) -> str:
-        """Deterministic block hash computed from header payload."""
+        """Hash the complete proposal header, including proposer and round."""
         return hash_data(self.payload_dict())
+
+    @property
+    def block_id(self) -> str:
+        """Stable consensus value ID, independent of proposer and round."""
+        return hash_data(
+            {
+                "parent_hash": self.parent_hash,
+                "height": self.height,
+                "state_root": self.state_root,
+                "transactions_root": self.transactions_root,
+            }
+        )
 
     def sign(self, key_pair: KeyPair, chain_id: str):
         """Sign header under context HEADER:{chain_id}."""
@@ -62,7 +74,7 @@ class Block:
 
     @property
     def block_hash(self) -> str:
-        return self.header.header_hash
+        return self.header.block_id
 
     @property
     def transactions_root(self) -> str:

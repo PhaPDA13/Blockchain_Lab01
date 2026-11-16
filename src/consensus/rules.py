@@ -99,7 +99,16 @@ class ConsensusLockState:
             # Duplicate vote - ignore
             return False
 
-        self._received_votes[key] = vote
+        # Keep an internal snapshot: Vote is mutable, and callers may retain or
+        # modify the object after submission. Consensus counts must not change.
+        self._received_votes[key] = Vote(
+            validator=vote.validator,
+            height=vote.height,
+            round=vote.round,
+            phase=vote.phase,
+            block_hash=vote.block_hash,
+            signature=vote.signature,
+        )
         return True
 
     def get_votes_for_phase(self, height: int, round: int, phase: VoteType) -> Dict[str, Vote]:
@@ -108,5 +117,13 @@ class ConsensusLockState:
         target_phase = phase.value
         for (h, r, p, val_pk), vote in self._received_votes.items():
             if h == height and r == round and p == target_phase:
-                res[val_pk] = vote
+                # Do not expose references to consensus-owned vote objects.
+                res[val_pk] = Vote(
+                    validator=vote.validator,
+                    height=vote.height,
+                    round=vote.round,
+                    phase=vote.phase,
+                    block_hash=vote.block_hash,
+                    signature=vote.signature,
+                )
         return res

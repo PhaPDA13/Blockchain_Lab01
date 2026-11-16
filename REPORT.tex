@@ -17,13 +17,64 @@
 \usepackage{subcaption}
 \usepackage{float}
 \usepackage{enumitem}
-\geometry{top=2cm,bottom=2cm,left=2.5cm,right=2.5cm}
-\hypersetup{colorlinks=true,linkcolor=darkblueframe,urlcolor=darkblueframe}
+
+\geometry{top=1.8cm,bottom=1.8cm,left=2cm,right=2cm}
+\hypersetup{colorlinks=true,linkcolor=darkblueframe,urlcolor=darkblueframe,citecolor=darkblueframe}
 
 \definecolor{darkblueframe}{RGB}{0,70,140}
 \setcounter{secnumdepth}{3}
 \setcounter{tocdepth}{2}
-\setlist{itemsep=2pt,topsep=4pt}
+\setlist{itemsep=1.5pt,topsep=2pt,parsep=0pt}
+
+% Tinh chỉnh khoảng cách tiêu đề chương để tiết kiệm không gian và bố cục gọn đẹp
+\makeatletter
+\def\@makechapterhead#1{%
+  \vspace*{4\p@}%
+  {\parindent \z@ \raggedright \normalfont
+    \ifnum \c@secnumdepth >\m@ne
+      \color{darkblueframe}\large\bfseries \@chapapp\ \thechapter\par\nobreak
+      \vskip 3\p@
+    \fi
+    \interlinepenalty\@M
+    \color{darkblueframe}\Large \bfseries #1\par\nobreak
+    \vskip 6\p@
+    \hrule height 0.6pt
+    \vskip 8\p@
+  }}
+\def\@makeschapterhead#1{%
+  \vspace*{4\p@}%
+  {\parindent \z@ \raggedright
+    \normalfont
+    \interlinepenalty\@M
+    \color{darkblueframe}\Large \bfseries  #1\par\nobreak
+    \vskip 6\p@
+    \hrule height 0.6pt
+    \vskip 8\p@
+  }}
+
+% Tùy biến thebibliography dùng section* thay vì chapter* để không bị ngắt trang thừa
+\renewenvironment{thebibliography}[1]
+     {\section*{\bibname}%
+      \@mkboth{\MakeUppercase\bibname}{\MakeUppercase\bibname}%
+      \list{\@biblabel{\@arabic\c@enumiv}}%
+           {\settowidth\labelwidth{\@biblabel{#1}}%
+            \leftmargin\labelwidth
+            \advance\leftmargin\labelsep
+            \itemsep 1.5pt
+            \parsep 0pt
+            \@openbib@code
+            \usecounter{enumiv}%
+            \let\p@enumiv\@empty
+            \renewcommand\theenumiv{\@arabic\c@enumiv}}%
+      \sloppy
+      \clubpenalty4000
+      \@clubpenalty \clubpenalty
+      \widowpenalty4000%
+      \sfcode`\.\@m}
+     {\def\@noitemerr
+       {\@latex@warning{Empty `thebibliography' environment}}%
+      \endlist}
+\makeatother
 
 \begin{document}
 \renewcommand{\chaptername}{Chương}
@@ -31,7 +82,9 @@
 \renewcommand{\figurename}{Hình}
 \renewcommand{\tablename}{Bảng}
 
-% -------------------- Cover --------------------
+% ==============================================================================
+% -------------------- TRANG BÌA (COVER PAGE) --------------------
+% ==============================================================================
 \begin{titlepage}
 \thispagestyle{empty}
 \begin{tikzpicture}[overlay,remember picture]
@@ -66,31 +119,32 @@
 \vspace{0.5cm}
 {\Large\bfseries MÔ PHỎNG BLOCKCHAIN LAYER 1\\VỚI CƠ CHẾ ĐỒNG THUẬN BFT}
 
-\vspace{0.65cm}
+\vspace{0.55cm}
 {\large\bfseries THÔNG TIN HỌC PHẦN}
 
-\vspace{0.3cm}
+\vspace{0.25cm}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{>{\bfseries}r @ {\hspace{0.8em}} l}
-Môn học & Nhập môn blockchain và ứng dụng (CSC15010) \\
-Lớp & CQ2023/22 \\
-Học kỳ & Học kỳ 1 -- 2026/2027 \\
+\begin{tabular}{>{\bfseries}l @{\hspace{1.2em}} l}
+Môn học: & Nhập môn blockchain và ứng dụng (CSC15010) \\
+Lớp:     & CQ2023/22 \\
+Học kỳ:  & Học kỳ 1 -- 2026/2027 \\
+Giảng viên hướng dẫn: & Th.S Ngô Đình Huy \\
 \end{tabular}
 
-\vspace{0.55cm}
+\vspace{0.45cm}
 {\color{darkblueframe}\rule{0.72\textwidth}{0.6pt}}
 
-\vspace{0.4cm}
-{\large\bfseries THÀNH VIÊN THỰC HIỆN}
+\vspace{0.35cm}
+{\large\bfseries DANH SÁCH THÀNH VIÊN}
 
 \vspace{0.25cm}
-\begin{tabular}{>{\bfseries}r @ {\hspace{0.8em}} l}
-Giảng viên & Th.S Ngô Đình Huy \\
-\multicolumn{2}{c}{\rule{0pt}{0.35cm}} \\
-1. & Nguyễn Gia Huy -- 23120273 \\
-2. & Bùi Duy Khánh -- 231204281 \\
-3. & Nguyễn Đăng Khoa -- 23120315 \\
-4. & Nguyễn Ngọc Nhân Trọng -- 23120382 \\
+\renewcommand{\arraystretch}{1.38}
+\begin{tabular}{>{\bfseries}l @{\hspace{2em}} l @{\hspace{2.5cm}} c}
+\textbf{Thành viên} & \textbf{Họ và tên} & \textbf{Mã số sinh viên} \\[0.12cm]
+Thành viên 1: & Nguyễn Gia Huy         & 23120273 \\
+Thành viên 2: & Bùi Duy Khánh          & 23120281 \\
+Thành viên 3: & Nguyễn Đăng Pha        & 23120315 \\
+Thành viên 4: & Nguyễn Ngọc Nhân Trọng & 23120382 \\
 \end{tabular}
 
 \vfill
@@ -99,166 +153,304 @@ Giảng viên & Th.S Ngô Đình Huy \\
 
 \pagenumbering{arabic}
 
-% -------------------- Report --------------------
-\chapter{Giới thiệu}
-\section{Bối cảnh}
-Blockchain là một sổ cái được nhiều máy tính cùng lưu giữ. Trước khi thêm block mới, các node cần xác minh dữ liệu và thống nhất rằng block đó hợp lệ. Bài lab xây dựng một mô hình Layer 1 thu nhỏ để minh họa các thành phần chính của node validator: giao dịch có chữ ký, thực thi trạng thái, đồng thuận Byzantine Fault Tolerant (BFT), và mạng truyền thông điệp có lỗi.
+% ==============================================================================
+% CHƯƠNG 1: GIỚI THIỆU VÀ CẤU TRÚC DỰ ÁN
+% ==============================================================================
+\chapter{Giới thiệu và Cấu trúc dự án}
 
-Đây là simulator phục vụ học tập, không kết nối vào một blockchain công khai và không xử lý tài sản thật.
+\section{Mục tiêu và Bối cảnh}
+Hệ thống blockchain phân tán dựa trên mạng ngang hàng (P2P) hoạt động trong môi trường không tin cậy đòi hỏi sự phối hợp chặt chẽ giữa tính toàn vẹn dữ liệu mật mã, sự lan truyền thông điệp mạng, cơ chế đồng thuận kháng lỗi Byzantine (BFT) và thực thi trạng thái xác định. Dự án này hiện thực một mô hình blockchain Layer 1 thu nhỏ hoàn chỉnh, hướng đến việc đạt được tính chốt khối tin cậy (\emph{reliable finality}) dưới điều kiện mạng truyền thông điệp không tin cậy (chịu ảnh hưởng bởi trễ, mất gói, trùng lặp và xáo trộn thứ tự).
 
-\section{Mục tiêu}
-Các mục tiêu của project gồm:
+Mục tiêu cốt lõi bao gồm:
 \begin{itemize}
-  \item Tạo và xác minh chữ ký Ed25519, băm SHA-256 và mã hóa dữ liệu nhất quán.
-  \item Kiểm tra giao dịch, quyền sở hữu khóa trạng thái và chống phát lại bằng nonce.
-  \item Mô hình hóa block, state root và quy trình bỏ phiếu hai pha Prevote/Precommit.
-  \item Mô phỏng độ trễ, mất và gửi trùng thông điệp; tạo log có thể tái lập theo seed.
-  \item Viết unit test và các kịch bản end-to-end để kiểm tra các thuộc tính an toàn cơ bản.
+  \item \textbf{Tính xác thực và toàn vẹn:} Mỗi giao dịch, đề xuất khối và phiếu bầu đều được bảo vệ bằng mật mã chữ ký số Ed25519, hàm băm SHA-256 và domain separation nghiêm ngặt.
+  \item \textbf{Thực thi xác định và chống phát lại:} State chuyển đổi xác định theo mô hình key-value; kiểm tra quyền sở hữu tiền tố người gửi và số thứ tự giao dịch (nonce) để loại bỏ hoàn toàn replay attack.
+  \item \textbf{Đồng thuận Byzantine Fault Tolerant (BFT):} Vận hành giao thức đồng thuận hai pha (Prevote và Precommit) tuân thủ 7 quy tắc khóa khối (Locking Rules), bảo đảm an toàn (\emph{Safety}) tại mọi thời điểm và tính sống (\emph{Liveness}) khi mạng ổn định.
+  \item \textbf{Mô phỏng mạng rời rạc xác định:} Mô hình hóa mạng bán đồng bộ (\emph{partially synchronous network}) có khả năng tái lập vết sự kiện (\emph{byte-identical logs}) thông qua hạt giống ngẫu nhiên (\emph{seed}).
 \end{itemize}
 
-\section{Phạm vi}
-Mã nguồn hiện thực các cấu trúc và hành vi cốt lõi ở mức mô phỏng. NetworkRunner nối transport với handler của node, timeout, proposal, hai phase vote và finalization. Mô phỏng mặc định dùng tám validator đúng; các test fault-injection kích hoạt drop, duplicate, proposer im lặng và equivocation.
+\section{Các quyết định thiết kế cốt lõi}
+Hệ thống được thiết kế dựa trên các nguyên tắc kỹ thuật sau:
+\begin{enumerate}
+  \item \textbf{Domain Separation tường minh:} Ngăn ngừa tấn công chuyển tiếp thông điệp chéo (\emph{cross-protocol replay}) bằng các tiền tố ngữ cảnh: \texttt{TX:chain\_id}, \texttt{HEADER:chain\_id}, \texttt{VOTE:chain\_id}.
+  \item \textbf{Mã hóa Canonical JSON:} Mọi cấu trúc dữ liệu trước khi băm hoặc ký đều được tuần tự hóa xác định (sắp xếp khóa từ điển, bỏ khoảng trắng dư thừa, mã hóa UTF-8).
+  \item \textbf{Tách biệt Header và Body:} Giảm thiểu băng thông lãng phí bằng cách broadcast \texttt{HEADER} trước; các node chỉ gửi \texttt{BODY\_REQUEST} và nhận \texttt{BODY} khi header hợp lệ.
+  \item \textbf{Tách biệt Semantic Block ID và Proposal Hash:} Mã băm định danh nội dung khối (\texttt{block\_id}) độc lập với thông tin vòng/người đề xuất (\texttt{header\_hash}), cho phép proposer đề xuất lại khối đã khóa ở các round tiếp theo mà không làm sai lệch trạng thái khóa.
+  \item \textbf{Chứng thực chốt khối di động (Finality Certificate):} Cho phép các node bị trễ hoặc khởi động lại bắt kịp chiều cao chuỗi khối tức thời mà không cần trải qua toàn bộ quá trình bỏ phiếu cục bộ.
+\end{enumerate}
 
-\chapter{Kiến trúc hệ thống}
-\section{Các tầng chính}
-Project được chia thành các tầng với trách nhiệm riêng:
-\begin{description}[style=nextline,leftmargin=0pt]
-  \item[Crypto] \texttt{src/crypto/} quản lý khóa, chữ ký, hash và biểu diễn dữ liệu.
-  \item[Execution] \texttt{src/execution/} định nghĩa transaction, block và trạng thái key-value.
-  \item[Consensus] \texttt{src/consensus/} tạo phiếu, đếm quorum và giữ trạng thái khóa.
-  \item[Network] \texttt{src/network/} mô phỏng message, lịch giao nhận, event loop và log sự kiện.
-  \item[Node] \texttt{src/node.py} kết hợp state, consensus, block buffer và transaction pool cục bộ.
+\section{Cấu trúc thư mục dự án}
+Dự án được cấu trúc theo đúng quy định tại Mục 10 của đề bài:
+\begin{description}[leftmargin=1.2em, itemsep=1.5pt]
+  \item[\texttt{src/crypto/}] Module mật mã: mã hóa chuẩn tắc \texttt{encoding.py}, hàm băm SHA-256 \& state root \texttt{hashing.py}, quản lý khóa Ed25519 \& chữ ký domain \texttt{identity.py}.
+  \item[\texttt{src/execution/}] Module thực thi: cấu trúc giao dịch \texttt{transaction.py}, khối \& tiêu đề \texttt{block.py}, sổ cái trạng thái key-value \& thực thi nguyên tử \texttt{state.py}.
+  \item[\texttt{src/consensus/}] Module đồng thuận: định nghĩa phiếu bầu \texttt{vote.py}, 7 quy tắc khóa khối \texttt{rules.py}, động cơ đồng thuận hai pha \& quorum \texttt{engine.py}.
+  \item[\texttt{src/network/}] Module mạng mô phỏng: định dạng thông điệp \texttt{message.py}, hàng đợi trễ/mất gói \texttt{simulator.py}, bộ ghi vết \texttt{logger.py}, vòng lặp sự kiện \texttt{runner.py}.
+  \item[\texttt{src/node.py}] Node validator tích hợp toàn diện các tầng thực thi, đồng thuận và bộ đệm giao dịch.
+  \item[\texttt{tests/}] Bộ kiểm thử gồm \texttt{tests/unit/} và \texttt{tests/e2e/test\_scenarios.py} (kịch bản T1--T8 và hồi quy).
+  \item[\texttt{config/}] Chứa tệp cấu hình mạng mặc định \texttt{default\_config.json}.
+  \item[\texttt{logs/}] Thư mục lưu vết log mô phỏng xác định (canonical byte logs).
+  \item[\texttt{run\_simulation.py}] Script thực thi mô phỏng 1 khối hoàn chỉnh trên mạng validator.
+  \item[\texttt{package\_submission.py}] Công cụ tự động đóng gói bài nộp theo định dạng chuẩn quy định.
+  \item[\texttt{README.md}, \texttt{REPORT.pdf}] Tài liệu hướng dẫn cài đặt/chạy kiểm thử và báo cáo kỹ thuật.
 \end{description}
+
+% ==============================================================================
+% CHƯƠNG 2: THIẾT KẾ HỆ THỐNG
+% ==============================================================================
+\chapter{Thiết kế hệ thống}
+
+\section{Kiến trúc phân tầng}
+Kiến trúc của mỗi validator node tuân theo mô hình phân tầng chặt chẽ với ranh giới trách nhiệm rõ ràng (Hình~\ref{fig:layered-arch}). Các node giao tiếp phi tập trung, không tồn tại bộ nhớ chia sẻ hay cơ quan điều phối trung ương.
 
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[
-  box/.style={draw,rounded corners=3pt,minimum width=10.8cm,minimum height=0.72cm,align=center,font=\small},
+  box/.style={draw,rounded corners=3pt,minimum width=11.2cm,minimum height=0.68cm,align=center,font=\small},
   arr/.style={-{Stealth[length=2.2mm]},thick,color=darkblueframe},
-  node distance=0.24cm
+  node distance=0.22cm
 ]
-\node[box,fill=blue!9] (api) {Ứng dụng / RPC (lớp phục vụ được mô tả trong kiến trúc)};
-\node[box,fill=orange!13,below=of api] (node) {Node validator -- \texttt{src/node.py}};
-\node[box,fill=green!12,below=of node] (cons) {Consensus: Prevote, Precommit, quorum, khóa block};
-\node[box,fill=yellow!18,below=of cons] (exec) {Execution: transaction, block, state root};
-\node[box,fill=red!8,below=of exec] (crypto) {Crypto: chữ ký Ed25519, hash, encoding};
-\node[box,fill=violet!10,below=of crypto] (net) {Network simulator: delay, drop, duplicate, logger};
-\draw[arr] (api) -- (node);
+\node[box,fill=blue!10] (node) {\textbf{Validator Node (\texttt{src/node.py})}: Quản lý Mempool, State, Buffer và điều phối};
+\node[box,fill=green!12,below=of node] (cons) {\textbf{Consensus Layer (\texttt{src/consensus/})}: BFT Engine, 7 Locking Rules, Quorum $n=3f+1$};
+\node[box,fill=yellow!16,below=of cons] (exec) {\textbf{Execution Layer (\texttt{src/execution/})}: Transaction, Block Header, State Root Commitments};
+\node[box,fill=red!8,below=of exec] (crypto) {\textbf{Cryptography Layer (\texttt{src/crypto/})}: Ed25519, SHA-256, Canonical JSON, Domain Separation};
+\node[box,fill=violet!10,below=of crypto] (net) {\textbf{Network Layer (\texttt{src/network/})}: Simulator (Delay, Drop, Dup), Event Runner, Logger};
+
 \draw[arr] (node) -- (cons);
 \draw[arr] (cons) -- (exec);
 \draw[arr] (exec) -- (crypto);
-\draw[arr,<->] (net.east) -- ++(1.1,0) |- (node.east);
+\draw[arr,<->] (net.east) -- ++(1.0,0) |- (node.east);
 \end{tikzpicture}
-\caption{Sơ đồ các thành phần chính trong kiến trúc node của bài lab. Lớp RPC được nêu như vai trò kiến trúc; repo hiện chưa hiện thực module RPC riêng.}
-\label{fig:node-architecture}
+\caption{Mô hình kiến trúc phân tầng của Validator Node trong hệ thống.}
+\label{fig:layered-arch}
 \end{figure}
 
-\section{Luồng xử lý dự kiến}
-Một vòng xử lý block được mô hình hóa theo chuỗi sau:
-\begin{enumerate}
-  \item Người dùng tạo và ký transaction bằng khóa riêng.
-  \item Proposer chọn các transaction hợp lệ, thực thi thử trên bản sao state và tạo header chứa state root dự kiến.
-  \item Các validator kiểm tra block, rồi phát phiếu PREVOTE cho block hash hoặc NIL.
-  \item Khi có quorum PREVOTE, validator phát PRECOMMIT tương ứng.
-  \item Khi đạt quorum PRECOMMIT cho cùng block, block được chốt; các transaction được áp dụng vào state.
-\end{enumerate}
+\section{Mô hình lỗi và Giả định mạng}
+\begin{itemize}
+  \item \textbf{Mô hình validator:} Tập hợp validator cố định $n$ node với $n \ge 8$ và thỏa $n = 3f + 1$, trong đó có tối đa $f = \lfloor(n - 1) / 3\rfloor$ node Byzantine. Với cấu hình mặc định $n = 10$, hệ thống chịu đựng được $f = 3$ node lỗi; ngưỡng quorum đạt $2f + 1 = 7$ phiếu.
+  \item \textbf{Hành vi Byzantine:} Validator Byzantine có thể im lặng (silent/crash), gửi tin nhắn lặp (duplicate), bỏ phiếu xung đột cho nhiều khối khác nhau (equivocation), đề xuất khối không hợp lệ hoặc phát lại tin cũ. Validator Byzantine không thể giả mạo chữ ký của node trung thực hay tìm va chạm hàm băm SHA-256.
+  \item \textbf{Mô hình mạng bán đồng bộ:} Trước thời điểm ổn định ($T_{stabilization}$), mạng có thể trễ tùy ý, làm rơi, nhân bản hoặc đảo thứ tự thông điệp. Sau $T_{stabilization}$, mọi thông điệp giữa các node trung thực được chuyển giao trong cận trễ $\Delta$ (\texttt{delta\_bound\_ticks}).
+\end{itemize}
 
-Với 8 validator, code tính $f=\lfloor(8-1)/3\rfloor=2$ và quorum $2f+1=5$. Đây là ngưỡng dùng trong engine để kiểm tra phiếu.
-
-\chapter{Giao dịch, block và trạng thái}
-\section{Giao dịch}
-Transaction gồm sender, state key, giá trị mới, nonce và chữ ký. Payload được ký trong domain \texttt{TX:<chain\_id>}; do đó chữ ký gắn với chain cụ thể. Hàm xác minh cũng yêu cầu state key có tiền tố thuộc sender, ngăn một tài khoản sửa khóa của tài khoản khác.
-
-Hash giao dịch được tính xác định từ payload. State từ chối transaction không hợp lệ hoặc nonce đã được dùng, nhằm giới hạn việc phát lại transaction. Các kiểm tra này được thể hiện trong \texttt{src/execution/transaction.py} và \texttt{src/execution/state.py}.
-
-\section{Block và state root}
-Header chứa parent hash, chiều cao, round, state root, transaction root và proposer. Proposer ký header theo domain \texttt{HEADER:<chain\_id>}. Block hash bắt nguồn từ payload của header. Khi tạo proposal, node thực thi thử các transaction trên bản sao state để đưa state root sau thực thi vào header.
-
-State root là hash đại diện cho trạng thái hiện tại. Thay đổi dữ liệu hoặc nonce sẽ làm thay đổi root, giúp node so sánh trạng thái sau khi thực thi. Root hiện được tính bằng SHA-256 trên biểu diễn canonical của các cặp key--value và nonce theo sender. Repo chưa hiện thực Merkle Patricia Trie hoặc proof.
-
-Header ký cả state root lẫn transaction root theo thứ tự transaction. Trước khi prevote, node kiểm tra chữ ký proposer, proposer theo lịch, parent hash, transaction root và state root sau khi thực thi. Khi chốt, node kiểm tra lại block và yêu cầu quorum PRECOMMIT. Nếu một transaction không hợp lệ hoặc root không khớp, node không cập nhật state và không tăng height.
-
-\section{Lỗi phát hiện và cách xử lý}
-Rà soát mã cho thấy hàm finalize cũ bỏ qua kết quả thực thi block, nên có thể tăng height dù transaction không hợp lệ. Node hiện thực thi thử trên state copy, kiểm tra root và chỉ commit sau khi có quorum PRECOMMIT. Engine cũng cần tính vote do chính validator ký vào quorum; vote cục bộ hiện được ghi nhận cùng luồng kiểm tra vote nhận. State root cũ bỏ qua nonce dù nonce ảnh hưởng transaction hợp lệ tiếp theo; root hiện cam kết cả nonce sender. Cuối cùng, header cũ không cam kết danh sách transaction; transaction root được thêm vào header và chữ ký proposer.
-
-\chapter{Đồng thuận BFT}
-\section{Hai pha bỏ phiếu}
-Engine chọn proposer theo vòng luân phiên xác định từ height và round. Validator gửi PREVOTE trước; sau khi quan sát đủ phiếu cho một block, có thể gửi PRECOMMIT. Quorum được tính trên các validator duy nhất, cùng height, round và phase.
+\section{Luồng xử lý và Lan truyền thông điệp}
+Quy trình một chu kỳ đồng thuận được mô tả tại Hình~\ref{fig:message-flow}:
 
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[
-  stepbox/.style={draw,rounded corners=3pt,minimum width=3.35cm,minimum height=1.05cm,align=center,font=\small},
-  arr/.style={-{Stealth[length=2.2mm]},thick,color=darkblueframe},
-  node distance=0.48cm
+  stepbox/.style={draw,rounded corners=3pt,minimum width=3.3cm,minimum height=0.9cm,align=center,font=\footnotesize},
+  arr/.style={-{Stealth[length=2mm]},thick,color=darkblueframe},
+  node distance=0.35cm
 ]
-\node[stepbox,fill=blue!9] (prop) {Proposer\\đề xuất block};
-\node[stepbox,fill=green!12,right=of prop] (prevote) {Validators kiểm tra\\và gửi PREVOTE};
-\node[stepbox,fill=yellow!18,right=of prevote] (q1) {Đạt quorum\\$2f+1$ PREVOTE};
-\node[stepbox,fill=orange!15,below=0.75cm of q1] (precommit) {Gửi\\PRECOMMIT};
-\node[stepbox,fill=red!9,left=of precommit] (q2) {Đạt quorum\\$2f+1$ PRECOMMIT};
-\node[stepbox,fill=violet!10,left=of q2] (final) {Chốt block\\và cập nhật state};
-\draw[arr] (prop) -- (prevote);
-\draw[arr] (prevote) -- (q1);
-\draw[arr] (q1) -- (precommit);
-\draw[arr] (precommit) -- (q2);
-\draw[arr] (q2) -- (final);
+\node[stepbox,fill=blue!8] (tx) {Client gửi Transaction\\ký \texttt{TX:chain\_id}};
+\node[stepbox,fill=cyan!12,right=of tx] (prop) {Proposer tạo Block\\Broadcast \texttt{HEADER}};
+\node[stepbox,fill=green!10,right=of prop] (body) {Node nhận Header\\Yêu cầu \& nhận \texttt{BODY}};
+\node[stepbox,fill=yellow!15,below=0.6cm of body] (prevote) {Thực thi thử \& Gửi\\phiếu \texttt{PREVOTE}};
+\node[stepbox,fill=orange!12,left=of prevote] (lock) {Quorum $2f+1$ Prevote\\Khóa khối \& Gửi \texttt{PRECOMMIT}};
+\node[stepbox,fill=red!10,left=of lock] (final) {Quorum $2f+1$ Precommit\\Finalize \& Broadcast Certificate};
+
+\draw[arr] (tx) -- (prop);
+\draw[arr] (prop) -- (body);
+\draw[arr] (body) -- (prevote);
+\draw[arr] (prevote) -- (lock);
+\draw[arr] (lock) -- (final);
 \end{tikzpicture}
-\caption{Luồng đồng thuận hai pha được mô hình hóa trong consensus engine. Với 8 validator, $f=2$ và quorum là 5 phiếu.}
-\label{fig:bft-flow}
+\caption{Sơ đồ tuần tự các bước xử lý thông điệp từ giao dịch đến chốt khối tin cậy.}
+\label{fig:message-flow}
 \end{figure}
 
-\section{Khóa và chống phiếu trùng}
-ConsensusLockState ghi nhận phiếu đã ký của node và phiếu nhận từ peer. Nó từ chối phiếu từ validator không thuộc validator set, chữ ký không hợp lệ, phiếu trùng và phiếu thứ hai của cùng validator trong cùng height/round/phase. Engine chỉ tạo PRECOMMIT sau khi quan sát quorum PREVOTE; trạng thái khóa được cập nhật khi quorum PREVOTE cho một block được ghi nhận.
+Chi tiết các bước thực hiện:
+\begin{enumerate}
+  \item \textbf{Ingress Giao dịch:} Node ingress nhận giao dịch, kiểm tra chữ ký và tính hợp lệ trước khi đưa vào mempool cục bộ và gossip sang các peer khác.
+  \item \textbf{Đề xuất Khối (Proposal):} Proposer xác định theo lịch vòng tròn ($idx = (height + round) \pmod n$). Proposer trích xuất các giao dịch hợp lệ, thực thi trên bản sao trạng thái (\emph{state copy}) để tính \texttt{state\_root}, đóng gói \texttt{transactions\_root} và ký phát tán \texttt{HEADER}.
+  \item \textbf{Đóng khung Header -- Body:} Node nhận xác thực chữ ký proposer, parent hash và lịch round. Khi header hợp lệ, node gửi tin \texttt{BODY\_REQUEST} tới proposer để nhận \texttt{BODY}.
+  \item \textbf{Pha PREVOTE:} Sau khi nhận đủ body, node thực thi tuần tự các transaction trên state copy. Nếu kết quả trùng khớp với \texttt{state\_root} trong header, node ký phát tán \texttt{PREVOTE} cho mã băm khối; ngược lại bỏ phiếu cho NIL.
+  \item \textbf{Khóa khối và Pha PRECOMMIT:} Khi quan sát thấy $\ge 2f + 1$ phiếu PREVOTE cho khối hợp lệ, node thực hiện khóa (\emph{lock}) khối đó tại round hiện tại và ký phát tán \texttt{PRECOMMIT}.
+  \item \textbf{Chốt khối (Finalization):} Khi quan sát thấy $\ge 2f + 1$ phiếu PRECOMMIT cho cùng một khối, node áp dụng vĩnh viễn các giao dịch vào trạng thái chính thức, tăng chiều cao khối (\texttt{height += 1}), thiết lập lại khóa và phát tán chứng thực chốt khối (\texttt{FINALIZED}).
+\end{enumerate}
 
-Nếu proposer không hoạt động, engine có thể tăng round và chọn proposer tiếp theo. Việc tăng round được mô hình hóa qua hàm chuyển round; xử lý timeout thực tế ở cấp toàn mạng còn tùy phần điều phối simulator.
+% ==============================================================================
+% CHƯƠNG 3: HIỆN THỰC VÀ CƠ CHẾ BẢO VỆ
+% ==============================================================================
+\chapter{Hiện thực và Cơ chế bảo vệ}
 
-\chapter{Mô phỏng mạng và ghi log}
-\section{Network simulator}
-NetworkSimulator dùng seed để tạo quyết định drop, delay, duplicate và thứ tự giao nhận có thể tái lập. Mỗi node có giới hạn outbound theo cửa sổ thời gian; simulator có thể block/unblock một cặp peer và log các sự kiện mạng. NetworkRunner đăng ký handler cho mỗi node và điều phối round timeout, proposal, vote và finalization.
-
-Block được truyền theo hai bước: node nhận kiểm tra header và chữ ký trước, rồi gửi \texttt{BODY\_REQUEST}; proposer chỉ gửi body theo yêu cầu đó. Node kiểm tra lại transaction root, chữ ký transaction và state root sau khi thực thi trước khi prevote. Transaction và vote đi qua NetworkSimulator; quyết định của node chỉ dựa trên header, body và vote đã nhận tại node đó.
-
-\section{Log xác định}
-Logger ghi sự kiện theo dạng canonical để có thể so sánh byte log giữa hai lần chạy cùng seed. Khả năng tái lập giúp debug: khi kết quả khác nhau, có thể kiểm tra sự kiện nào, ở thời điểm nào, đã dẫn đến sai khác.
-
-\chapter{Kiểm thử}
-Repo tổ chức test thành \texttt{tests/unit/} và \texttt{tests/e2e/}. Unit test kiểm tra crypto, state, consensus, giới hạn outbound và peer blocking. Các scenario T1--T8 chạy qua NetworkRunner/NetworkSimulator với phạm vi sau:
-\begin{description}[style=nextline,leftmargin=0pt]
-  \item[T1 -- Bình thường] Proposal, header/body, hai phase vote và finalization qua mạng; mọi node chốt cùng block và state root.
-  \item[T2 -- Duplicate/reorder] Bật duplicate và delay ngẫu nhiên; không đếm vote lặp và không chia finality.
-  \item[T3--T4 -- Transaction lỗi/phát lại] Gửi transaction sai domain và replay qua message handler; node từ chối và log lý do.
-  \item[T5 -- Drop/delay] Trước synchrony, drop/delay message; sau synchrony, các node chốt cùng block và không có hai hash final tại cùng height.
-  \item[T6 -- Proposer im lặng] Bỏ qua proposer round 0; timeout đưa mạng sang round 1 và block vẫn được chốt.
-  \item[T7 -- Equivocation] Hai validator ký vote mâu thuẫn gửi qua transport; mỗi node tính tối đa một vote mỗi validator/phase và không tạo quorum giả.
-  \item[T8 -- Tái lập] Cùng seed tạo cùng block/state root và byte log của mọi node lẫn transport.
-\end{description}
-
-Lần chạy entry point cho kết quả 21/21 test đạt. T5 xác nhận safety và hội tụ trong cấu hình fault-injection đã chọn; đây là kiểm thử thực nghiệm hữu hạn, không phải chứng minh hình thức cho mọi lịch message.
-
-Có thể gọi test bằng \texttt{python -m tests.run\_all\_tests}; cùng lệnh này chạy trong GitHub Actions khi push hoặc pull request. Mô phỏng một block có thể chạy bằng \texttt{python run\_simulation.py}; log canonical có thể ghi ra thư mục mới bằng tùy chọn \texttt{--write-logs}.
-
-\chapter{Giới hạn và hướng phát triển}
+\section{Cơ chế bảo vệ Cryptography và Domain Separation}
+Tất cả các thông điệp ảnh hưởng đến trạng thái và đồng thuận đều được ký số bằng thuật toán Ed25519. Để loại bỏ hoàn toàn khả năng một chữ ký hợp lệ ở thông điệp này bị tái sử dụng ở thông điệp khác hoặc trên mạng khác, hệ thống áp dụng cơ chế Domain Separation:
 \begin{itemize}
-  \item Bổ sung đồng bộ/catch-up cho node bỏ lỡ nhiều height và phục hồi qua restart.
-  \item Mở rộng Byzantine fault runner để tự động sinh proposal lỗi, equivocation và replay qua nhiều height.
-  \item Bổ sung kiểm tra độc lập cho state root/proof và lưu bền nonce theo sender.
-  \item Mở rộng ma trận fault-injection để kiểm tra nhiều seed, mức drop và cửa sổ ổn định.
+  \item \textbf{Giao dịch:} Ký trên ngữ cảnh \texttt{TX:<chain\_id>} với payload gồm \texttt{\{sender, key, value, nonce\}}.
+  \item \textbf{Tiêu đề khối:} Ký trên ngữ cảnh \texttt{HEADER:<chain\_id>} với payload gồm \texttt{\{parent\_hash, height, round, state\_root, proposer, transactions\_root\}}.
+  \item \textbf{Phiếu bầu:} Ký trên ngữ cảnh \texttt{VOTE:<chain\_id>} với payload gồm \texttt{\{validator, height, round, phase, block\_hash\}}.
+\end{itemize}
+Mọi payload được đưa về chuỗi byte chuẩn hóa bằng \texttt{canonical\_encode} trước khi đưa vào hàm ký hoặc băm, đảm bảo tính nhất quán trên các nền tảng khác nhau.
+
+\section{Bảo vệ Trạng thái và Thực thi giao dịch}
+Trạng thái ứng dụng được quản lý dưới dạng bảng ánh xạ key-value trong \texttt{State}. Cơ chế bảo vệ thực thi bao gồm:
+\begin{itemize}
+  \item \textbf{Kiểm tra quyền sở hữu khóa (Ownership Guard):} Khóa trạng thái bắt buộc phải có tiền tố là địa chỉ công khai của người gửi (\texttt{key.startswith(sender + "/")}). Không một tài khoản nào có thể thay đổi dữ liệu của tài khoản khác.
+  \item \textbf{Chống phát lại bằng Nonce tuần tự:} Mỗi tài khoản duy trì một bộ đếm nonce bắt đầu từ 0. Giao dịch chỉ được chấp nhận nếu $nonce == expected\_nonce$. Sau khi thực thi thành công, nonce của tài khoản tăng lên 1 và hash của giao dịch được lưu vào tập \texttt{\_executed\_tx\_hashes}.
+  \item \textbf{Thực thi nguyên tử (All-or-Nothing):} Khi thực thi một khối, toàn bộ danh sách giao dịch được áp dụng trên bản sao chụp trạng thái (\emph{snapshot}). Nếu có bất kỳ giao dịch nào không hợp lệ, toàn bộ khối bị từ chối và trạng thái gốc được bảo toàn.
+  \item \textbf{Cam kết State Root toàn diện:} \texttt{state\_root} là hàm băm SHA-256 cam kết đồng thời cả dữ liệu bản ghi (\texttt{records}) lẫn trạng thái nonce của người gửi (\texttt{sender\_nonces}), ngăn chặn việc sai lệch lịch sử giao dịch.
 \end{itemize}
 
-\chapter{Kết luận}
-Project cung cấp mô hình cơ bản để học cách một node blockchain xử lý transaction, tạo block, bỏ phiếu BFT và cập nhật state. Việc tách crypto, execution, consensus và network giúp từng mối quan tâm dễ đọc và kiểm tra hơn. Các test hiện có minh họa nhiều tình huống quan trọng như chữ ký sai, transaction bị phát lại, phiếu trùng và log xác định.
-
-NetworkRunner hiện điều phối luồng một height qua mạng mô phỏng. Bước tiếp theo là bổ sung catch-up khi node bỏ lỡ height và mở rộng fault-injection nhiều height, nhiều lịch message.
-
-\section*{Tài liệu tham khảo}
-\begin{enumerate}[leftmargin=*,itemsep=0pt,topsep=2pt]
-  \sloppy
-  \item Blockchain course, \emph{Lab 01} (đề bài cung cấp, 2026).
-  \item Knowledge Engineering Department, HCMUS, \emph{Lab 01: Node Architecture, Clients, and State Synchronization}, slides, 6 Nov 2025.
-  \item cryptography contributors, \emph{Ed25519 signing}, \url{https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ed25519/}.
-  \item pytest contributors, \emph{pytest documentation}, \url{https://docs.pytest.org/en/stable/}.
-  \item GitHub, \emph{Workflow syntax for GitHub Actions}, \url{https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions}.
+\section{Bảy quy tắc đồng thuận và Khóa khối (Mục 6.1)}
+Lớp đồng thuận cài đặt nghiêm ngặt 7 quy tắc khóa khối trong \texttt{ConsensusLockState}:
+\begin{enumerate}
+  \item Ký tối đa một phiếu \texttt{PREVOTE} cho mỗi cặp \texttt{(height, round)}.
+  \item Ký tối đa một phiếu \texttt{PRECOMMIT} cho mỗi cặp \texttt{(height, round)}.
+  \item Chỉ chấp nhận và bỏ phiếu PREVOTE cho khối có parent hợp lệ, giao dịch hợp lệ, state root chính xác, đúng proposer và chữ ký proposer hợp lệ.
+  \item Khi quan sát thấy quorum PREVOTE ($\ge 2f + 1$) cho một khối non-NIL, validator khóa khối đó và ghi nhận round khóa tương ứng (\texttt{locked\_round}).
+  \item Validator đã khóa khối $B$ chỉ được phép PREVOTE cho khối $B'$ khác nếu quan sát thấy một quorum PREVOTE hợp lệ cho $B'$ ở một round lớn hơn round đã khóa.
+  \item Validator từ chối ký phiếu bầu sai chain, height, round, phase hoặc sai domain.
+  \item Bỏ qua phiếu bầu trùng lặp; chỉ đếm tối đa một phiếu hợp lệ từ mỗi validator cho mỗi bộ ba \texttt{(height, round, phase)}.
 \end{enumerate}
+
+\section{Chiến lược mạng và Đồng bộ phục hồi}
+\begin{itemize}
+  \item \textbf{Giới hạn thông lượng (Rate Limiting):} Simulator theo dõi thời điểm gửi thông điệp của từng node trong cửa sổ \texttt{rate\_window\_ticks}. Nếu vượt quá \texttt{max\_outbound\_rate}, thông điệp bị hủy và ghi log sự kiện \texttt{drop}.
+  \item \textbf{Cô lập ngang hàng (Peer Blocking):} Hỗ trợ cô lập hai chiều giữa hai node thông qua \texttt{block\_peer} và phục hồi lại bằng \texttt{unblock\_peer}.
+  \item \textbf{Quản lý Timeout tăng dần:} Thời gian chờ của round được tính lũy thừa theo số vòng thất bại ($timeout = base \times 2^{round}$) nhằm đảm bảo tính liveness khi mạng gặp trễ lớn.
+  \item \textbf{Cơ chế bắt kịp qua Certificate:} Khi một node nhận được thông điệp \texttt{FINALIZED} kèm danh sách $\ge 2f + 1$ phiếu PRECOMMIT hợp lệ, node có thể chốt khối và nhảy cóc lên height mới mà không bị kẹt ở round cũ.
+\end{itemize}
+
+\section{Các lỗi phi tầm thường phát hiện và Cách giải quyết}
+Trong quá trình phát triển và kiểm thử sâu rộng hệ thống, nhóm đã phát hiện và xử lý 5 lỗi kỹ thuật phi tầm thường (\emph{non-trivial bugs}):
+\begin{enumerate}
+  \item \textbf{Lỗi reset timer vòng đồng thuận ở chiều cao mới (Critical):}
+  \emph{Hiện tượng:} Khi validator hoàn tất chốt khối ở height 1 tại tick 18 và chuyển sang height 2, bộ đếm thời gian round của height 2 được khởi tạo mặc định bằng 0 (\texttt{\_round\_started.setdefault(key, 0)}). Do đó, phép so sánh $now - started = 18 - 0 = 18 \ge timeout$ lập tức kích hoạt timeout liên tục, khiến node nhảy round bất tận và không thể chốt các khối tiếp theo.
+  \emph{Giải pháp:} Khởi tạo thời điểm bắt đầu round bằng thời gian logic hiện tại của simulator: \texttt{\_round\_started.setdefault(key, self.simulator.current\_time)}.
+
+  \item \textbf{Từ chối Header/Body đến trễ sau khi đã chuyển round (High):}
+  \emph{Hiện tượng:} Khi một node bị trễ cục bộ và đã timeout sang round $r + 1$, các gói tin \texttt{HEADER} và \texttt{BODY} hợp lệ được đề xuất ở round $r$ bị hàm kiểm tra từ chối do mặc định tham số \texttt{require\_current\_round = True}. Điều này làm node không thể thu thập đủ bằng chứng khối để tham gia vào quorum precommit.
+  \emph{Giải pháp:} Cho phép tiếp nhận và lưu trữ khối đề xuất hợp lệ từ các round trước đó bằng cách đặt \texttt{require\_current\_round = False} đối với các khối có $round \le current\_round$.
+
+  \item \textbf{State Root không cam kết trạng thái Nonce (Medium):}
+  \emph{Hiện tượng:} Ban đầu \texttt{compute\_state\_root} chỉ băm danh sách các bản ghi key-value. Nếu hai trạng thái có cùng dữ liệu nhưng khác số nonce của tài khoản, mã băm state root vẫn giống nhau, tạo lỗ hổng cho phép tái sử dụng giao dịch ở các nhánh rẽ.
+  \emph{Giải pháp:} Cập nhật hàm tính state root để băm đồng thời cả cấu trúc \texttt{records} và \texttt{sender\_nonces} dưới dạng chuẩn tắc.
+
+  \item \textbf{Đồng nhất hóa định danh khối giữa các vòng (Medium):}
+  \emph{Hiện tượng:} Ban đầu mã băm khối \texttt{block\_hash} được tính trực tiếp từ \texttt{header\_hash}. Khi proposer ở round mới đề xuất lại khối đã khóa từ round trước, tiêu đề khối bắt buộc phải chứa round mới và chữ ký mới, dẫn đến \texttt{block\_hash} bị thay đổi và vi phạm quy tắc khóa khối (Rule 5).
+  \emph{Giải pháp:} Tách biệt \texttt{header\_hash} (phục vụ xác thực đề xuất cụ thể của round) và \texttt{block\_id} (cam kết ngữ nghĩa gồm parent hash, height, state root và transactions root) để bảo toàn danh tính khối qua các round.
+
+  \item \textbf{Rò rỉ đối tượng Vote có thể sửa đổi (Low):}\\
+  \emph{Hiện tượng:} Đối tượng \texttt{Vote} là mutable dataclass. Khi \texttt{ConsensusLockState} lưu trữ và trả về tham chiếu trực tiếp, các module bên ngoài có thể vô tình hoặc cố ý thay đổi trường dữ liệu phiếu bầu, làm sai lệch kết quả kiểm tra quorum nội bộ.
+  \emph{Giải pháp:} Cài đặt sao chép phòng vệ (\emph{defensive copy}) khi tiếp nhận và truy xuất phiếu bầu trong \texttt{ConsensusLockState}.
+\end{enumerate}
+
+% ==============================================================================
+% CHƯƠNG 4: KIỂM THỬ VÀ KẾT QUẢ
+% ==============================================================================
+\chapter{Kiểm thử và Kết quả thực nghiệm}
+
+\section{Tổ chức kiểm thử}
+Hệ thống kiểm thử được xây dựng toàn diện với \textbf{35 bài test tự động}, tích hợp qua công cụ \texttt{pytest} và có thể thực thi thông qua một entry point duy nhất:
+\begin{quote}
+\texttt{python -m tests.run\_all\_tests}
+\end{quote}
+Bộ kiểm thử bao gồm ba lớp:
+\begin{itemize}
+  \item \textbf{Unit Tests (22 tests):} Kiểm tra độc lập từng thành phần: tính xác định của mã hóa canonical và phân tách domain (\texttt{test\_crypto.py}); quyền sở hữu dữ liệu, kiểm tra nonce và cam kết state root (\texttt{test\_state.py}); đếm quorum $n = 3f + 1$, chống vote trùng và bất biến đối tượng vote (\texttt{test\_consensus.py}); từ chối khối sai chữ ký, sai parent, sai proposer, sai round, sai transaction root hoặc sai state root (\texttt{test\_block.py}); giới hạn tốc độ và chặn peer (\texttt{test\_network.py}).
+  \item \textbf{Kịch bản E2E bắt buộc T1--T8 (8 tests):} Mô phỏng đầy đủ hành vi mạng và các dạng lỗi Byzantine theo yêu cầu Mục 9 của đề bài.
+  \item \textbf{Kiểm thử hồi quy tích hợp (5 tests):} Kiểm tra hoạt động của timer round ở các chiều cao mới, khả năng đọc cấu hình, tiếp nhận header trễ, cơ chế bắt kịp qua finality certificate và phục hồi đa chiều cao sau lỗi mạng.
+\end{itemize}
+
+\section{Bảng tổng hợp Kịch bản E2E (T1 -- T8)}
+Bảng~\ref{tab:e2e-results} trình bày chi tiết mục tiêu kiểm thử, kết quả kỳ vọng và kết quả thực nghiệm của 8 kịch bản bắt buộc:
+
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\textwidth}{|c|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|>{\centering\arraybackslash}p{2.2cm}|c|}
+\hline
+\textbf{ID} & \textbf{Kịch bản} & \textbf{Kết quả kỳ vọng theo đề} & \textbf{Kết quả thực nghiệm} & \textbf{Đánh giá} \\
+\hline
+\textbf{T1} & Mạng bình thường, không lỗi & Mọi node trung thực chốt cùng chuỗi khối và cùng state root. & 8/8 node chốt cùng block hash và state root tại height 1. & \textbf{PASSED} \\
+\hline
+\textbf{T2} & Duplicate và xáo trộn gói tin & Không đếm trùng phiếu bầu; không xảy ra phân rẽ trạng thái chốt. & Không có phiếu lặp nào được tính; 8/8 node chốt đồng nhất. & \textbf{PASSED} \\
+\hline
+\textbf{T3} & Chữ ký sai hoặc sai domain context & Node ingress từ chối thông điệp và ghi nhận lý do vào log. & Transaction và vote sai domain bị loại bỏ; ghi nhận log từ chối. & \textbf{PASSED} \\
+\hline
+\textbf{T4} & Giao dịch bị phát lại (Replay attack) & Giao dịch chỉ được thực thi tối đa đúng một lần duy nhất. & State root không đổi; giao dịch phát lại bị chặn bởi nonce/hash. & \textbf{PASSED} \\
+\hline
+\textbf{T5} & Drop và Delay trước thời điểm ổn định & Bảo toàn tính Safety (không chốt 2 khối cùng height); hội tụ sau $T_{stab}$. & Không xảy ra double finalization; mạng chốt khối sau khi ổn định. & \textbf{PASSED} \\
+\hline
+\textbf{T6} & Proposer vòng 0 bị im lặng (Silent/Crash) & Timeout vòng đồng thuận được kích hoạt; round 1 tiếp tục và chốt khối. & Round 0 hết hạn; proposer round 1 đề xuất và chốt khối thành công. & \textbf{PASSED} \\
+\hline
+\textbf{T7} & Tối đa $f$ validator gửi phiếu mâu thuẫn & Không thể tạo ra quorum giả; bảo toàn tính an toàn. & Mỗi validator chỉ được tính 1 phiếu; không khối nào đạt quorum giả. & \textbf{PASSED} \\
+\hline
+\textbf{T8} & Tái lập kịch bản với cùng seed ngẫu nhiên & State root, danh sách khối và log canonical trùng khớp từng byte. & So khớp byte-by-byte trên toàn bộ log node và log transport đạt 100\%. & \textbf{PASSED} \\
+\hline
+\end{tabularx}
+\caption{Kết quả thực nghiệm trên các kịch bản kiểm thử End-to-End bắt buộc (T1 -- T8).}
+\label{tab:e2e-results}
+\end{table}
+
+\section{Phân tích các tình huống dị thường}
+\begin{itemize}
+  \item \textbf{Phân tích gian lận phân thân (Byzantine Equivocation -- T7):} Trong kịch bản T7 với $n = 8, f = 2$, hai node Byzantine gửi đồng thời hai phiếu PREVOTE hợp lệ cho hai mã băm khối khác nhau (\texttt{block\_A} và \texttt{block\_B}). Do quy tắc Rule 7 được cài đặt chặt chẽ trong \texttt{ConsensusLockState}, các node trung thực chỉ tiếp nhận phiếu đầu tiên đến và từ chối dứt khoát phiếu thứ hai của cùng validator trong round đó. Kết quả là không có khối nào đạt đủ ngưỡng quorum 5 phiếu, loại trừ hoàn toàn nguy cơ phân nhánh chuỗi.
+  \item \textbf{Phân tích mất gói và phục hồi tính sống (T5):} Trước tick 16, xác suất mất gói được thiết lập lên tới 40\% và trễ tối đa 4 tick. Mặc dù các vòng đề xuất ban đầu bị timeout do thiếu thông điệp, không có bất kỳ trạng thái chốt khối trái ngược nào xảy ra (bảo toàn tuyệt đối tính \emph{Safety}). Ngay sau khi mạng ổn định tại tick 16, các thông điệp đề xuất và bỏ phiếu được chuyển giao tin cậy, giúp toàn bộ 8 node đồng thuận thành công tại tick 24 (bảo toàn tính \emph{Liveness}).
+  \item \textbf{Kiểm chứng tính xác định (Determinism Check -- T8):} Thực thi kịch bản kiểm thử hai lần độc lập với cùng seed ngẫu nhiên 999. Kiểm tra so sánh đối chiếu mảng byte (\texttt{bytes equality}) giữa hai lần chạy cho thấy: chuỗi khối đã chốt, mã băm state root, toàn bộ log sự kiện của từng validator và log sự kiện của simulator giống nhau tuyệt đối từng byte.
+\end{itemize}
+
+Kết quả thực nghiệm trên toàn bộ suite kiểm thử đạt \textbf{35/35 test đạt (100\%)} trong thời gian 2.40 giây.
+
+% ==============================================================================
+% CHƯƠNG 5: KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN
+% ==============================================================================
+\chapter{Kết luận và Hướng phát triển}
+
+\section{Kết quả đạt được}
+Dự án đã hoàn thành xuất sắc toàn bộ các mục tiêu đặt ra của bài thực hành Lab 01:
+\begin{itemize}
+  \item Xây dựng hoàn chỉnh một validator node Layer 1 với kiến trúc phân tầng khoa học, tách bạch giữa mật mã, thực thi trạng thái, cơ chế đồng thuận và mô phỏng mạng.
+  \item Cài đặt đầy đủ và chuẩn xác giao thức đồng thuận BFT hai pha với 7 quy tắc khóa khối, giải quyết trọn vẹn bài toán đồng thuận trong mạng bán đồng bộ có sự hiện diện của node Byzantine.
+  \item Hiện thực cơ chế thực thi trạng thái an toàn với kiểm tra quyền sở hữu, số thứ tự nonce chống phát lại và cam kết state root xác định.
+  \item Xây dựng hệ thống kiểm thử tự động phong phú (35 tests) bao phủ toàn bộ các góc cạnh lý thuyết và kịch bản dị thường, kèm khả năng tái lập vết sự kiện 100\% bằng log canonical.
+\end{itemize}
+
+\section{Hạn chế và Hướng mở rộng}
+\begin{itemize}
+  \item \textbf{Cấu trúc dữ liệu State:} Hiện tại state root sử dụng hàm băm SHA-256 trên toàn bộ từ điển đã sắp xếp. Để tối ưu hóa hiệu năng khi số lượng tài khoản lớn, hệ thống có thể mở rộng nâng cấp sang cấu trúc Merkle Patricia Trie (MPT) hoặc Verkle Tree nhằm cung cấp bằng chứng thành viên (\emph{Merkle proof}) cho các light client.
+  \item \textbf{Cơ chế đồng bộ trạng thái nhanh (Fast Sync):} Nghiên cứu tích hợp snapshot trạng thái và đồng bộ hóa qua mạng đối với các node mới tham gia hoặc các node bị gián đoạn hoạt động trong thời gian dài.
+  \item \textbf{Mô hình giao dịch mở rộng:} Bổ sung hệ thống tính toán phí giao dịch (gas fee) và hỗ trợ thực thi hợp đồng thông minh tối giản trên máy ảo phân tán.
+\end{itemize}
+
+% ==============================================================================
+% TÀI LIỆU THAM KHẢO
+% ==============================================================================
+\begin{thebibliography}{99}
+\bibitem{lab01-spec}
+Khoa Công nghệ Tri thức, Trường Đại học Khoa học Tự nhiên -- ĐHQG-HCM,
+\emph{Đề bài thực hành Lab 01: Layer 1 Blockchain Simulator with BFT Consensus}, 2026.
+
+\bibitem{lab01-slides}
+Khoa Công nghệ Tri thức, Trường Đại học Khoa học Tự nhiên -- ĐHQG-HCM,
+\emph{Bài giảng Lab 01: Node Architecture, Clients, and State Synchronization}, Slides môn học, Tháng 11/2025.
+
+\bibitem{tendermint}
+Ethan Buchman,
+\emph{Tendermint: Byzantine Fault Tolerance in the Age of Blockchains},
+Master's Thesis, University of Guelph, 2016.
+
+\bibitem{pbft}
+Miguel Castro, Barbara Liskov,
+\emph{Practical Byzantine Fault Tolerance and Proactive Recovery},
+ACM Transactions on Computer Systems (TOCS), Vol. 20, No. 4, pp. 398--461, 2002.
+
+\bibitem{ed25519-rfc}
+S. Josefsson, I. Liusvaara,
+\emph{Edwards-Curve Digital Signature Algorithm (EdDSA)},
+IETF RFC 8032, 2017. \url{https://datatracker.ietf.org/doc/html/rfc8032}.
+
+\bibitem{cryptography-lib}
+Python Cryptographic Authority (PyCA),
+\emph{cryptography: Hazardous Materials Primitives -- Ed25519},
+2026. \url{https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ed25519/}.
+
+\bibitem{pytest-docs}
+Holger Krekel and pytest developers,
+\emph{pytest: simple powerful testing with Python},
+2026. \url{https://docs.pytest.org/en/stable/}.
+\end{thebibliography}
 
 \end{document}

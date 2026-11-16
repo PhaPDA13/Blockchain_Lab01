@@ -13,6 +13,7 @@ class MessageType(str, Enum):
     BODY_REQUEST = "BODY_REQUEST"
     BODY = "BODY"
     VOTE = "VOTE"
+    FINALIZED = "FINALIZED"
 
 
 @dataclass
