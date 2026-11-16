@@ -31,14 +31,33 @@ class Vote:
             "block_hash": self.block_hash or "",
         }
 
+    def _has_valid_fields(self) -> bool:
+        """Check structural and domain constraints (Rule 6: valid height, round, phase)."""
+        return (
+            isinstance(self.validator, str)
+            and bool(self.validator)
+            and isinstance(self.height, int)
+            and not isinstance(self.height, bool)
+            and self.height >= 1
+            and isinstance(self.round, int)
+            and not isinstance(self.round, bool)
+            and self.round >= 0
+            and isinstance(self.phase, VoteType)
+            and (self.block_hash is None or isinstance(self.block_hash, str))
+        )
+
     def sign(self, key_pair: KeyPair, chain_id: str):
         """Sign vote under context VOTE:{chain_id}."""
+        if not self._has_valid_fields():
+            raise ValueError("Cannot sign vote with invalid height, round, or phase.")
         context = f"VOTE:{chain_id}"
         self.signature = key_pair.sign(self.payload_dict(), context)
 
     def is_valid(self, chain_id: str) -> bool:
-        """Verify vote signature under context VOTE:{chain_id}."""
-        if not self.signature:
+        """Verify vote fields and signature under context VOTE:{chain_id}."""
+        if not self._has_valid_fields():
+            return False
+        if not isinstance(self.signature, str) or not self.signature:
             return False
         context = f"VOTE:{chain_id}"
         return verify_signature(

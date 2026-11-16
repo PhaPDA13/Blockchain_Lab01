@@ -124,14 +124,21 @@ class Node:
         return self.consensus.add_received_vote(vote)
 
     def validate_proposal_header(
-        self, header: BlockHeader, require_current_round: bool = True
+        self,
+        header: BlockHeader,
+        require_current_round: bool = True,
+        allow_future_round: bool = False,
     ) -> bool:
         """Validate proposal context and signature before asking for its body."""
         if header.height != self.consensus.height or header.round < 0:
             return False
         if require_current_round and header.round != self.consensus.round:
             return False
-        if not require_current_round and header.round > self.consensus.round:
+        if (
+            not require_current_round
+            and not allow_future_round
+            and header.round > self.consensus.round
+        ):
             return False
 
         expected_parent = (
@@ -147,10 +154,19 @@ class Node:
             return False
         return True
 
-    def validate_proposal_block(self, block: Block, require_current_round: bool = True) -> bool:
+    def validate_proposal_block(
+        self,
+        block: Block,
+        require_current_round: bool = True,
+        allow_future_round: bool = False,
+    ) -> bool:
         """Check a proposal's context, signature, body commitment, and execution result."""
         header = block.header
-        if not self.validate_proposal_header(header, require_current_round):
+        if not self.validate_proposal_header(
+            header,
+            require_current_round=require_current_round,
+            allow_future_round=allow_future_round,
+        ):
             return False
         if header.transactions_root != block.transactions_root:
             return False
@@ -172,8 +188,6 @@ class Node:
     ) -> bool:
         """Validate a committed block before updating state and advancing height."""
         header = block.header
-        if not self.validate_proposal_block(block, require_current_round=False):
-            return False
         has_local_quorum = (
             self.consensus.check_precommit_quorum(header.height, header.round)
             == block.block_hash
@@ -183,15 +197,24 @@ class Node:
         )
         if not has_local_quorum and not has_certificate:
             return False
+        if not self.validate_proposal_block(
+            block,
+            require_current_round=False,
+            allow_future_round=has_certificate,
+        ):
+            return False
 
         if not self.state.apply_block_transactions(block.transactions, self.chain_id):
             return False
 
         self.finalized_blocks.append(block)
-        # Remove applied transactions
+        # Remove applied or stale transactions from mempool
         applied_hashes = {tx.tx_hash for tx in block.transactions}
         self.pending_transactions = [
-            tx for tx in self.pending_transactions if tx.tx_hash not in applied_hashes
+            tx
+            for tx in self.pending_transactions
+            if tx.tx_hash not in applied_hashes
+            and tx.nonce >= self.state._sender_nonces.get(tx.sender, 0)
         ]
         self.consensus.advance_to_next_height()
         return True

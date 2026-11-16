@@ -83,14 +83,32 @@ def test_quorum_calculation():
 
 
 def test_validator_count_must_follow_n_equals_three_f_plus_one():
-    validators = [KeyPair() for _ in range(8)]
-    with pytest.raises(ValueError, match=r"n = 3f \+ 1"):
+    # Configurable n >= 8 is supported with safe BFT quorum floor(2n/3) + 1;
+    # n < 4 (where f = 0) is rejected.
+    validators_8 = [KeyPair() for _ in range(8)]
+    engine_8 = ConsensusEngine(
+        "node0",
+        validators_8[0],
+        "test_chain",
+        [key.public_key_hex for key in validators_8],
+    )
+    assert engine_8.f == 2
+    assert engine_8.quorum_size == 6
+    assert 2 * engine_8.quorum_size - engine_8.n >= engine_8.f + 1
+
+    validators_3 = [KeyPair() for _ in range(3)]
+    with pytest.raises(ValueError, match="at least 4"):
         ConsensusEngine(
             "node0",
-            validators[0],
+            validators_3[0],
             "test_chain",
-            [key.public_key_hex for key in validators],
+            [key.public_key_hex for key in validators_3],
         )
+
+    # Rule 6: Vote signing and validation reject invalid height, round, or phase
+    bad_vote = Vote(validators_8[0].public_key_hex, 0, 0, VoteType.PREVOTE, "h")
+    with pytest.raises(ValueError):
+        bad_vote.sign(validators_8[0], "test_chain")
 
 
 def test_precommit_requires_prevote_quorum():
@@ -105,8 +123,29 @@ def test_precommit_requires_prevote_quorum():
         vote.sign(key, "test_chain")
         assert engine.add_received_vote(vote) is True
 
+    # Rule 4: Prevote quorum locks block_hash_1 at round 0
+    assert engine.lock_state.locked_block_hash == "block_hash_1"
+    assert engine.lock_state.locked_round == 0
+
     precommit = engine.create_precommit("block_hash_1")
     assert precommit is not None
+
+    # Rule 5: In round 1, validator locked on block_hash_1 cannot prevote block_hash_2
+    # without observing a prevote quorum for block_hash_2 in a round > locked_round
+    engine.advance_to_next_round()
+    assert engine.create_prevote("block_hash_2") is None
+    assert engine.create_prevote("block_hash_1") is not None
+
+    # Observing a prevote quorum for block_hash_2 in round 1 unlocks/relocks to block_hash_2
+    for key in validators[1:8]:
+        vote_r1 = Vote(key.public_key_hex, 1, 1, VoteType.PREVOTE, "block_hash_2")
+        vote_r1.sign(key, "test_chain")
+        assert engine.add_received_vote(vote_r1) is True
+    assert engine.lock_state.locked_block_hash == "block_hash_2"
+    assert engine.lock_state.locked_round == 1
+
+    engine.advance_to_next_round()
+    assert engine.create_prevote("block_hash_2") is not None
 
 
 def test_local_votes_count_toward_quorum():

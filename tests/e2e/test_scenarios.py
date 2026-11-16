@@ -41,7 +41,7 @@ def setup_runner(
         max_delay=max_delay,
         stabilization_time=stabilization_time,
         delta_bound=2,
-        max_outbound_rate=50,
+        max_outbound_rate=500,
         rate_window_ticks=1000,
     )
     runner = NetworkRunner(
@@ -88,6 +88,9 @@ def test_t1_normal_run_no_faults():
     assert events.index("header_accepted") < events.index("body_accepted")
     assert "prevote" in events
     assert "precommit" in events
+    assert not any(
+        entry["type"] == "drop" for entry in runner.simulator.logger.entries
+    )
 
 
 def test_t2_duplicate_and_reordered_network_messages():
@@ -410,6 +413,37 @@ def test_finality_certificate_catches_up_a_lagging_node():
 
     assert receiver.consensus.height == 2
     assert receiver.finalized_blocks[0].block_hash == block.block_hash
+
+    # Also verify direct Node.finalize_block on a lagging node (round 0) with a
+    # future-round certificate (round 1) without pre-mutating node.consensus.round
+    round1_proposer = next(
+        node
+        for node in nodes
+        if node.consensus.get_proposer(2, 1) == node.public_key_hex
+    )
+    lagging = next(
+        node for node in nodes if node not in (proposer, round1_proposer)
+    )
+    if lagging.consensus.height == 1:
+        assert lagging.finalize_block(block, certificate) is True
+    round1_proposer.finalized_blocks = list(lagging.finalized_blocks)
+    round1_proposer.consensus.height = 2
+    round1_proposer.consensus.round = 1
+    block_h2_r1 = round1_proposer.create_proposal_block(block.block_hash)
+    cert_h2_r1 = []
+    for key_pair in key_pairs[:7]:
+        vote = Vote(
+            key_pair.public_key_hex,
+            2,
+            1,
+            VoteType.PRECOMMIT,
+            block_h2_r1.block_hash,
+        )
+        vote.sign(key_pair, chain_id)
+        cert_h2_r1.append(vote)
+    assert lagging.consensus.round == 0
+    assert lagging.finalize_block(block_h2_r1, cert_h2_r1) is True
+    assert lagging.consensus.height == 3
 
 
 def test_multi_height_recovery_after_early_message_faults():

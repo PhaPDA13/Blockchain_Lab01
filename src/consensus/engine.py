@@ -28,10 +28,13 @@ class ConsensusEngine:
         if key_pair.public_key_hex not in self.validators:
             raise ValueError("This node's public key must belong to the validator set.")
         self.n = len(self.validators)
-        if self.n < 4 or (self.n - 1) % 3 != 0:
-            raise ValueError("Validator count must satisfy n = 3f + 1.")
+        if self.n < 4:
+            raise ValueError("Validator count must be at least 4 (n >= 3f + 1 with f >= 1).")
         self.f = (self.n - 1) // 3
-        self.quorum_size = 2 * self.f + 1
+        # Standard BFT quorum size: floor(2n / 3) + 1.
+        # Equals 2f + 1 when n = 3f + 1 (e.g. n=10 -> f=3, quorum=7), and
+        # guarantees quorum intersection >= f + 1 for any configurable n >= 8 (e.g. n=8 -> f=2, quorum=6).
+        self.quorum_size = (2 * self.n) // 3 + 1
 
         self.height = 1
         self.round = 0

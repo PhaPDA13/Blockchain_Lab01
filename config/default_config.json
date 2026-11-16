@@ -4,7 +4,7 @@
   "max_byzantine_faults": 3,
   "drop_rate": 0.0,
   "duplicate_rate": 0.0,
-  "max_outbound_rate": 50,
+  "max_outbound_rate": 500,
   "rate_window_ticks": 1000,
   "min_delay_ticks": 1,
   "max_delay_ticks": 5,

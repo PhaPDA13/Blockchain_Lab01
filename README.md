@@ -106,9 +106,9 @@ Cấu hình mặc định được lưu tại [`config/default_config.json`](con
 
 | Đại lượng | Ký hiệu | Giá trị mặc định | Quy tắc kiểm tra |
 |---|:---:|:---:|---|
-| Số validator | $n$ | `10` | Bắt buộc $n \ge 8$ và $n = 3f + 1$ |
+| Số validator | $n$ | `10` | Hỗ trợ cấu hình $n \ge 8$ (chuẩn $n = 3f + 1$) |
 | Số lỗi Byzantine tối đa | $f$ | `3` | $f = \lfloor(n - 1) / 3\rfloor$ |
-| Kích thước Quorum | $Q$ | `7` | $Q = 2f + 1$ (tương đương $n - f$) |
+| Kích thước Quorum | $Q$ | `7` | $Q = \lfloor 2n / 3 \rfloor + 1$ ($= 2f + 1$ khi $n = 3f + 1$) |
 
 Bảng giải nghĩa các trường cấu hình:
 
@@ -248,9 +248,13 @@ python run_simulation.py --write-logs logs/run-01
 *(Lưu ý: Thư mục đích phải chưa tồn tại từ trước để đảm bảo tính an toàn dữ liệu).*
 
 ### Kiểm tra tính xác định (Re-running equality check)
-Theo yêu cầu Mục 8: *"Provide a script that runs the same scenario twice and checks equality of logs and final state"*, bạn có thể kiểm chứng bằng 2 cách:
-1. Chạy test `T8`: `python -m pytest tests/e2e/test_scenarios.py -k test_t8 -v` (chạy tự động 2 lần cùng seed 999 và so khớp từng byte của state root, block hashes, node logs và simulator network log).
-2. Chạy script mô phỏng ra 2 thư mục riêng biệt và so sánh:
+Theo yêu cầu Mục 8: *"Provide a script that runs the same scenario twice and checks equality of logs and final state"*, bạn có thể kiểm chứng bằng 3 cách:
+1. Dùng trực tiếp cờ `--check-determinism` của script mô phỏng (chạy tự động 2 lần kịch bản cấu hình và kiểm tra byte-identical cho `block_hash`, `state_root`, toàn bộ log từng node và log mạng):
+   ```bash
+   python run_simulation.py --check-determinism
+   ```
+2. Chạy test `T8`: `python -m pytest tests/e2e/test_scenarios.py -k test_t8 -v` (chạy tự động 2 lần cùng seed 999 và so khớp từng byte của state root, block hashes, node logs và simulator network log).
+3. Chạy script mô phỏng ra 2 thư mục riêng biệt và so sánh:
    ```bash
    python run_simulation.py --write-logs logs/run-A
    python run_simulation.py --write-logs logs/run-B

@@ -46,7 +46,6 @@ class NetworkRunner:
             node.public_key_hex: node.node_id for node in nodes
         }
         self._proposed_rounds: Set[Tuple[str, int, int]] = set()
-        self._blocks: Dict[str, Block] = {}
         self._body_requested: Set[Tuple[str, str]] = set()
         self._round_started: Dict[Tuple[str, int, int], int] = {}
         self._vote_history: Dict[Tuple[str, int, int, str], Dict[str, object]] = {}
@@ -67,13 +66,9 @@ class NetworkRunner:
     def from_config(cls, nodes: List[Node], config: Dict[str, object]) -> "NetworkRunner":
         """Build a runner and simulator from config/default_config.json values."""
         expected_nodes = int(config.get("num_nodes", len(nodes)))
-        if (
-            expected_nodes != len(nodes)
-            or expected_nodes < 8
-            or (expected_nodes - 1) % 3 != 0
-        ):
+        if expected_nodes != len(nodes) or expected_nodes < 8:
             raise ValueError(
-                "Config must match supplied nodes and satisfy n = 3f + 1 with n >= 8."
+                "Config must match supplied nodes and include at least 8 validators."
             )
         fault_budget = int(config.get("max_byzantine_faults", 0))
         if fault_budget < 0 or fault_budget > (expected_nodes - 1) // 3:
@@ -89,7 +84,7 @@ class NetworkRunner:
             max_delay=int(config.get("max_delay_ticks", 5)),
             stabilization_time=int(config.get("stabilization_time_ticks", 1000)),
             delta_bound=int(config.get("delta_bound_ticks", 2)),
-            max_outbound_rate=int(config.get("max_outbound_rate", 50)),
+            max_outbound_rate=int(config.get("max_outbound_rate", 500)),
             rate_window_ticks=int(config.get("rate_window_ticks", 1000)),
         )
         return cls(
@@ -193,7 +188,6 @@ class NetworkRunner:
         )
         block = node.create_proposal_block(parent_hash)
         proposal_hash = block.header.header_hash
-        self._blocks[proposal_hash] = block
         node.received_headers[proposal_hash] = block.header
         node.received_blocks[proposal_hash] = block
         node.logger.log_event(
@@ -312,7 +306,7 @@ class NetworkRunner:
         if height not in self._finalized_history:
             self._finalized_history[height] = (source_id, payload)
             self._last_finalized_broadcast[height] = self.simulator.current_time
-        self._broadcast(source_id, MessageType.FINALIZED, height, payload)
+            self._broadcast(source_id, MessageType.FINALIZED, height, payload)
 
     def _parse_finalized_payload(
         self, node: Node, payload: Dict[str, object]
@@ -362,8 +356,6 @@ class NetworkRunner:
         certificate: List[Vote],
         payload: Dict[str, object],
     ) -> bool:
-        if block.header.round > node.consensus.round:
-            node.consensus.round = block.header.round
         if not node.finalize_block(block, certificate):
             return False
         self._record_finalization(node, block)
@@ -584,7 +576,7 @@ class NetworkRunner:
     def _handle_body_request(self, node: Node, message: NetworkMessage) -> None:
         block_hash = str(message.payload["block_hash"])
         proposal_hash = str(message.payload["proposal_hash"])
-        block = self._blocks.get(proposal_hash)
+        block = node.received_blocks.get(proposal_hash)
         if (
             block is None
             or block.block_hash != block_hash
@@ -625,13 +617,25 @@ class NetworkRunner:
             block.block_hash != block_hash
             or block.header.header_hash != proposal_hash
             or not node.validate_proposal_block(
-            block, require_current_round=False
+                block, require_current_round=False
             )
         ):
             self._reject(node, message, "invalid_block_body_or_state_root")
+            if (
+                header.height == node.consensus.height
+                and header.round == node.consensus.round
+            ):
+                nil_vote = node.consensus.create_prevote(None)
+                if nil_vote is not None:
+                    node.logger.log_event(
+                        self.simulator.current_time,
+                        "prevote",
+                        nil_vote.height,
+                        {"round": nil_vote.round, "hash": nil_vote.block_hash},
+                    )
+                    self._broadcast_vote(node, nil_vote)
             return
 
-        self._blocks[proposal_hash] = block
         node.received_blocks[proposal_hash] = block
         node.logger.log_event(
             self.simulator.current_time,

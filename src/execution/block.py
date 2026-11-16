@@ -55,8 +55,24 @@ class BlockHeader:
         self.signature = key_pair.sign(self.payload_dict(), context)
 
     def is_valid_signature(self, chain_id: str) -> bool:
-        """Verify header signature from proposer."""
-        if not self.signature:
+        """Verify header fields and signature from proposer."""
+        if (
+            not isinstance(self.parent_hash, str)
+            or not self.parent_hash
+            or not isinstance(self.height, int)
+            or isinstance(self.height, bool)
+            or self.height < 1
+            or not isinstance(self.round, int)
+            or isinstance(self.round, bool)
+            or self.round < 0
+            or not isinstance(self.state_root, str)
+            or not self.state_root
+            or not isinstance(self.proposer, str)
+            or not self.proposer
+            or not isinstance(self.transactions_root, str)
+            or not isinstance(self.signature, str)
+            or not self.signature
+        ):
             return False
         context = f"HEADER:{chain_id}"
         return verify_signature(
