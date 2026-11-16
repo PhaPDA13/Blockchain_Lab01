@@ -254,7 +254,7 @@ def test_t7_byzantine_equivocation_cannot_form_a_false_quorum():
     chain_id, nodes, key_pairs, runner = setup_runner(
         seed=47, timeout=100, auto_propose=False, max_delay=2
     )
-    honest_nodes = nodes[2:]
+    honest_nodes = nodes[3:]
     for byzantine_index in range(3):
         byzantine = nodes[byzantine_index]
         for block_hash in ("block_A", "block_B"):

@@ -4,7 +4,7 @@
 
 Dự án mô phỏng một mạng validator Layer 1 tối giản theo đặc tả của **Lab 01 (Blockchain Course 2026)**. Các node nhận transaction và block qua mạng mô phỏng không tin cậy (unreliable network), xác minh chữ ký, kiểm tra quyền sở hữu và nonce, bỏ phiếu qua hai pha **PREVOTE / PRECOMMIT**, khóa khối (locking) và chốt block đạt tính tin cậy tuyệt đối (*reliable finality*).
 
-Hệ thống đáp ứng trọn vẹn các yêu cầu cốt lõi của đề bài:
+Hệ thống hiện thực các thành phần cốt lõi của đề bài; các giới hạn của mô phỏng được nêu trong `REPORT.pdf`:
 
 - **Cryptography layer (Mục 5):** Chữ ký Ed25519, hàm băm SHA-256, domain separation (`TX:chain_id`, `HEADER:chain_id`, `VOTE:chain_id`) và mã hóa canonical byte xác định.
 - **Execution layer (Mục 7):** State key–value với quyền sở hữu khóa (`sender/key`), nonce chống replay, chuyển dịch trạng thái tất cả-hoặc-không và cam kết state root.
@@ -263,6 +263,15 @@ Theo yêu cầu Mục 8: *"Provide a script that runs the same scenario twice an
 ---
 
 ## 9. Đóng gói bài nộp
+
+Thư mục `logs/` được giữ rỗng trong Git để tránh commit log phát sinh. Trước khi đóng gói, hãy tạo log mẫu tại chỗ; để lưu bằng chứng kiểm tra tính xác định, chạy mô phỏng hai lần:
+
+```bash
+python run_simulation.py --write-logs logs/run-A
+python run_simulation.py --write-logs logs/run-B
+```
+
+`package_submission.py` yêu cầu `logs/` chứa ít nhất một tệp log và sẽ đưa các log hiện có vào gói nộp.
 
 Sử dụng script đóng gói tự động `package_submission.py` từ thư mục gốc:
 

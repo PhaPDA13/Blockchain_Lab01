@@ -43,6 +43,17 @@ def package(student_ids):
     if missing:
         raise FileNotFoundError("Required submission items are missing: " + ", ".join(missing))
 
+    log_files = [
+        path
+        for path in (project_dir / "logs").rglob("*")
+        if path.is_file() and path.name != ".gitkeep"
+    ]
+    if not log_files:
+        raise FileNotFoundError(
+            "No simulation logs found in logs/. Run run_simulation.py --write-logs "
+            "logs/run-01 before packaging."
+        )
+
     target_dir.mkdir()
     zip_created = False
     try:
